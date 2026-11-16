@@ -98,9 +98,10 @@ export const EXTRA_LABELS = { xstickVolume: 'XStick volume', pedalHhVolume: 'Ped
 
 export const address = {
   currentKit: () => [0x00, 0x00, 0x00, 0x00],
-  kitVolume: (kit) => [...kitBase(kit), 0x00, 0x1f],
-  pedalHhVolume: (kit) => [...kitBase(kit), 0x00, 0x23],
-  xstickVolume: (kit) => [...kitBase(kit), 0x00, 0x27],
+  // Multi-nibble values are addressed by their FIRST nibble (the '#' row in Roland's tables).
+  kitVolume: (kit) => [...kitBase(kit), 0x00, 0x1c],
+  pedalHhVolume: (kit) => [...kitBase(kit), 0x00, 0x20],
+  xstickVolume: (kit) => [...kitBase(kit), 0x00, 0x24],
   pan: (kit, unit) => [...kitBase(kit), 0x20 + unit, 0x00],
   subSwitch: (kit, unit) => [...kitBase(kit), 0x20 + unit, 0x02],
   volume: (kit, unit, layer = 'main') => [...kitBase(kit), (layer === 'sub' ? 0x60 : 0x40) + unit, 0x04],

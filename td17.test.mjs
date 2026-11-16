@@ -27,8 +27,8 @@ test('addresses', () => {
   assert.deepEqual(address.pan(99, 0), [0x04, 0x46, 0x20, 0x00]); // kit 100
   assert.deepEqual(address.volume(79, 1), [0x04, 0x1e, 0x41, 0x04]); // seen on the real module
   assert.deepEqual(address.subSwitch(0, 1), [0x03, 0x00, 0x21, 0x02]);
-  assert.deepEqual(address.pedalHhVolume(0), [0x03, 0x00, 0x00, 0x23]);
-  assert.deepEqual(address.xstickVolume(0), [0x03, 0x00, 0x00, 0x27]);
+  assert.deepEqual(address.pedalHhVolume(0), [0x03, 0x00, 0x00, 0x20]);
+  assert.deepEqual(address.xstickVolume(0), [0x03, 0x00, 0x00, 0x24]);
 });
 
 test('groups cover every unit exactly once', () => {
