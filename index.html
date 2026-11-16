@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v2</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v3</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -225,14 +225,26 @@ async function connectBle() {
       if ($('rawPackets').checked) log(`BLE ${td.hex(packet)}`);
       for (const msg of parser.push(packet)) onMidi(msg);
     });
-    await ch.startNotifications();
-    log('Bluetooth: notifications on');
+    // The BLE-MIDI spec has the central read the characteristic first; on an
+    // encrypted link this is what prompts the phone to pair with the module.
     try {
       const v = await ch.readValue();
       log(`Bluetooth: initial read ok (${v.byteLength} bytes)`);
     } catch (e) {
-      log(`Bluetooth: initial read failed: ${e.message}`);
+      log(`Bluetooth: initial read failed: ${e.name}: ${e.message}`);
     }
+    for (let attempt = 1; ; attempt++) {
+      try {
+        log(`Bluetooth: enabling notifications (attempt ${attempt})…`);
+        await ch.startNotifications();
+        break;
+      } catch (e) {
+        log(`Bluetooth: notifications failed: ${e.name}: ${e.message}`);
+        if (attempt === 3 || !device.gatt.connected) throw e;
+        await sleep(1500); // pairing may still be completing
+      }
+    }
+    log('Bluetooth: notifications on');
     transport = {
       async send(bytes) {
         for (const packet of td.bleEncodeSysex(bytes, performance.now())) {
