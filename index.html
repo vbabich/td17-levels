@@ -54,7 +54,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v16</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v17</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -110,7 +110,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=16'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=17'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -456,7 +456,7 @@ async function readGroupInner(current) {
     pans.push(panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)));
   }
   for (const x of group.extras ?? []) {
-    const extra = volumeParam(x, `${td.EXTRA_LABELS[x]} (kit-wide)`, 'Volume', td.address[x](kit));
+    const extra = volumeParam(x, td.EXTRA_LABELS[x], 'Volume', td.address[x](kit));
     extra.deferred = true; // only heard on its own articulation, so written when a drag ends
     extras.push(extra);
   }

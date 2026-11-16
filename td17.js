@@ -94,7 +94,7 @@ export const GROUPS = [
   { name: 'Aux', units: [18, 19] },
 ];
 
-export const EXTRA_LABELS = { xstickVolume: 'XStick volume', pedalHhVolume: 'Pedal HH volume' };
+export const EXTRA_LABELS = { xstickVolume: 'XStick', pedalHhVolume: 'Pedal HH' };
 
 export const address = {
   currentKit: () => [0x00, 0x00, 0x00, 0x00],
