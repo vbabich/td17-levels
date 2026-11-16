@@ -107,6 +107,27 @@ export const address = {
   volume: (kit, unit, layer = 'main') => [...kitBase(kit), (layer === 'sub' ? 0x60 : 0x40) + unit, 0x04],
 };
 
+// ---- Combined level: move several layer volumes together, keeping their balance ----
+
+// Captures the balance between layer volumes (e.g. [main, sub]). A layer at -INF is
+// "pinned": the combined level leaves it alone, unless every layer is at -INF.
+export function captureBlend(values) {
+  let pinned = values.map((v) => v <= VOLUME_MIN);
+  if (pinned.every(Boolean)) pinned = values.map(() => false);
+  const leader = pinned.indexOf(false);
+  return { leader, pinned, offsets: values.map((v, i) => (pinned[i] ? 0 : v - values[leader])) };
+}
+
+// New value for each layer when the combined level (the leader's volume) is set.
+// Pinned layers get null, meaning "leave unchanged".
+export function applyBlend(blend, level) {
+  return blend.offsets.map((offset, i) => {
+    if (blend.pinned[i]) return null;
+    if (level <= VOLUME_MIN) return VOLUME_MIN;
+    return Math.min(VOLUME_MAX, Math.max(VOLUME_MIN + 1, level + offset));
+  });
+}
+
 export function formatVolume(v) {
   if (v <= VOLUME_MIN) return '-INF';
   return `${v > 0 ? '+' : ''}${(v / 10).toFixed(1)} dB`;

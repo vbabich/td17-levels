@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   dt1, rq1, parseDt1, parseIdentityReply, encodeNibbles, decodeNibbles, address,
-  bleEncodeSysex, BleMidiParser, hex, GROUPS, UNITS,
+  bleEncodeSysex, BleMidiParser, hex, GROUPS, UNITS, captureBlend, applyBlend,
 } from './td17.js';
 
 test("Roland's worked DT1 example", () => {
@@ -33,6 +33,23 @@ test('addresses', () => {
 
 test('groups cover every unit exactly once', () => {
   assert.deepEqual(GROUPS.flatMap((g) => g.units), UNITS.map((_, i) => i));
+});
+
+test('combined level keeps the main/sub balance', () => {
+  const blend = captureBlend([0, -60]); // sub 6 dB under main
+  assert.deepEqual(applyBlend(blend, -100), [-100, -160]);
+  assert.deepEqual(applyBlend(blend, 60), [60, 0]);
+  assert.deepEqual(applyBlend(blend, -590), [-590, -600]); // clamps above -INF
+  assert.deepEqual(applyBlend(blend, -601), [-601, -601]); // bottom mutes both
+  assert.deepEqual(applyBlend(blend, -30), [-30, -90]); // balance survives the trip to -INF
+});
+
+test('combined level leaves a muted layer alone', () => {
+  assert.deepEqual(applyBlend(captureBlend([10, -601]), -50), [-50, null]);
+  const subLeads = captureBlend([-601, -20]);
+  assert.equal(subLeads.leader, 1);
+  assert.deepEqual(applyBlend(subLeads, 0), [null, 0]);
+  assert.deepEqual(applyBlend(captureBlend([-601, -601]), -40), [-40, -40]);
 });
 
 test('nibble encoding round-trips signed values', () => {

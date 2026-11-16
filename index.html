@@ -30,13 +30,15 @@
   .slider { display:grid; grid-template-columns:5em 1fr 5.5em; gap:8px; align-items:center; font-size:14px; }
   .slider .name { color:var(--muted); }
   .slider.mismatch .value { color:var(--bad); }
+  #sliders:not(.separate) .detail { display:none; }
+  .slider.detail .name { padding-left:.8em; }
   label { font-size:14px; color:var(--muted); display:flex; gap:6px; align-items:center; }
   #log { font:12px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-all; max-height:260px; overflow:auto; margin:0; }
 </style>
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v10</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v11</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -77,6 +79,7 @@
       <button id="readPad" disabled>Read</button>
       <button id="restorePad" disabled>Restore</button>
       <button id="latency" disabled>Latency test</button>
+      <label><input type="checkbox" id="separate"> Main / Sub</label>
     </div>
     <div id="sliders"></div>
     <div class="result" id="padResult"></div>
@@ -91,7 +94,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=10'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=11'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -183,10 +186,8 @@ function applyModuleEdit(msg) {
     const sameBlock = p.addr.slice(0, 3).every((b, i) => b === d.address[i]);
     if (!sameBlock || offset < 0 || offset + p.size > d.data.length) continue;
     if (performance.now() - (p.touched ?? 0) < 500) continue; // don't fight a slider being dragged
-    p.value = td.decodeNibbles(d.data.slice(offset, offset + p.size));
-    p.input.value = p.value;
-    p.out.textContent = p.format(p.value);
-    p.row.classList.remove('mismatch');
+    setParamValue(p, td.decodeNibbles(d.data.slice(offset, offset + p.size)));
+    if (p.combo) syncCombo(p.combo);
     setResult('padResult', `${p.section} ${p.label} changed on the module: ${p.format(p.value)}`, 'ok');
   }
 }
@@ -390,11 +391,10 @@ async function readGroupInner(current) {
   for (const u of group.units) {
     const name = td.UNITS[u];
     const subOn = (await current(request(td.address.subSwitch(kit, u), 1)))[0] === 1;
-    list.push(
-      volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main')),
-      volumeParam(`${u}s`, name, subOn ? 'Sub' : 'Sub (off)', td.address.volume(kit, u, 'sub')),
-      panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)),
-    );
+    const main = volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main'));
+    const sub = volumeParam(`${u}s`, name, subOn ? 'Sub' : 'Sub (off)', td.address.volume(kit, u, 'sub'));
+    main.combo = sub.combo = { section: name, layers: [main, sub] }; // one Level slider drives both
+    list.push(main, sub, panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)));
   }
   for (const x of group.extras ?? []) {
     list.push(volumeParam(x, `${td.EXTRA_LABELS[x]} (kit-wide)`, 'Volume', td.address[x](kit)));
@@ -407,6 +407,33 @@ async function readGroupInner(current) {
   setResult('padResult', `Kit ${kit + 1}, ${group.name}: read ${list.length} values`, 'ok');
 }
 
+function makeRow(section, label, min, max, value, format, detail = false) {
+  const row = Object.assign(document.createElement('div'), { className: detail ? 'slider detail' : 'slider' });
+  const name = Object.assign(document.createElement('span'), { className: 'name', textContent: label });
+  const input = Object.assign(document.createElement('input'), { type: 'range', min, max });
+  input.value = value;
+  input.setAttribute('aria-label', `${section} ${label}`);
+  const out = Object.assign(document.createElement('span'), { className: 'value', textContent: format(value) });
+  row.append(name, input, out);
+  return { row, input, out };
+}
+
+function setParamValue(p, value) {
+  p.value = value;
+  p.input.value = value;
+  p.out.textContent = p.format(value);
+  p.row.classList.remove('mismatch');
+}
+
+// Re-captures the main/sub balance and moves the Level slider to match.
+function syncCombo(combo) {
+  const values = combo.layers.map((p) => p.value);
+  combo.blend = td.captureBlend(values);
+  const level = values[combo.blend.leader];
+  combo.input.value = level;
+  combo.out.textContent = td.formatVolume(level);
+}
+
 function renderSliders() {
   const box = $('sliders');
   box.replaceChildren();
@@ -416,23 +443,36 @@ function renderSliders() {
       section = p.section;
       box.append(Object.assign(document.createElement('h3'), { textContent: section }));
     }
-    const row = Object.assign(document.createElement('div'), { className: 'slider' });
-    const name = Object.assign(document.createElement('span'), { className: 'name', textContent: p.label });
-    const input = Object.assign(document.createElement('input'), { type: 'range', min: p.min, max: p.max });
-    input.value = p.value;
-    input.setAttribute('aria-label', `${p.section} ${p.label}`);
-    const out = Object.assign(document.createElement('span'), { className: 'value', textContent: p.format(p.value) });
-    input.oninput = () => {
-      p.value = +input.value;
+    const combo = p.combo;
+    if (combo && combo.layers[0] === p) {
+      // Level: moves main and sub together, keeping their balance.
+      const c = makeRow(p.section, 'Level', td.VOLUME_MIN, td.VOLUME_MAX, 0, td.formatVolume);
+      Object.assign(combo, c);
+      c.input.oninput = () => {
+        const level = +c.input.value;
+        c.out.textContent = td.formatVolume(level);
+        td.applyBlend(combo.blend, level).forEach((value, i) => {
+          if (value === null) return;
+          const layer = combo.layers[i];
+          setParamValue(layer, value);
+          layer.touched = performance.now();
+          queueWrite(layer.id, writeBytes(layer, value));
+        });
+      };
+      c.input.onchange = async () => { for (const layer of combo.layers) await confirmParam(layer); };
+      box.append(c.row);
+    }
+    const r = makeRow(p.section, p.label, p.min, p.max, p.value, p.format, !!combo);
+    Object.assign(p, r);
+    r.input.oninput = () => {
+      setParamValue(p, +r.input.value);
       p.touched = performance.now();
-      out.textContent = p.format(p.value);
-      row.classList.remove('mismatch');
+      if (combo) syncCombo(combo);
       queueWrite(p.id, writeBytes(p, p.value));
     };
-    input.onchange = () => confirmParam(p);
-    Object.assign(p, { row, input, out });
-    row.append(name, input, out);
-    box.append(row);
+    r.input.onchange = () => confirmParam(p);
+    box.append(r.row);
+    if (combo && combo.layers.at(-1) === p) syncCombo(combo);
   }
 }
 
@@ -543,6 +583,13 @@ $('group').onchange = () => {
   setPadEnabled(false);
   setResult('padResult', '');
   if (transport) run(readGroup, 'padResult')();
+};
+const savedSeparate = (() => { try { return localStorage.getItem('separate') === '1'; } catch { return false; } })();
+$('separate').checked = savedSeparate;
+$('sliders').classList.toggle('separate', savedSeparate);
+$('separate').onchange = (e) => {
+  $('sliders').classList.toggle('separate', e.target.checked);
+  try { localStorage.setItem('separate', e.target.checked ? '1' : '0'); } catch { /* private mode */ }
 };
 $('disconnect').onclick = () => { log('Disconnect requested'); transport?.disconnect(); };
 $('restorePad').onclick = run(restoreGroup, 'padResult');
