@@ -134,6 +134,27 @@ export function applyBlend(blend, level) {
   });
 }
 
+// ---- Spread band: shows on a combined slider when the values under it disagree ----
+
+export const SUB_SPREAD_MIN = 30; // 3.0 dB: an on-sub this far from its own main counts
+
+// `leader` is the value the combined slider shows. Each entry is { kind, value }, with
+// kind 'main' or 'pan' (zone values: any difference from the leader counts), 'sub'
+// (also { main, on }: counts only when on and SUB_SPREAD_MIN or more from its own main)
+// or 'extra' (never counts). Returns { min, max } spanning the counted values and the
+// leader, or null when nothing counts.
+export function spreadBand(leader, entries) {
+  const counted = entries
+    .filter((e) => {
+      if (e.kind === 'main' || e.kind === 'pan') return e.value !== leader;
+      if (e.kind === 'sub') return Boolean(e.on) && Math.abs(e.value - e.main) >= SUB_SPREAD_MIN;
+      return false;
+    })
+    .map((e) => e.value);
+  if (!counted.length) return null;
+  return { min: Math.min(leader, ...counted), max: Math.max(leader, ...counted) };
+}
+
 export function formatVolume(v) {
   if (v <= VOLUME_MIN) return '-INF';
   return `${v > 0 ? '+' : ''}${(v / 10).toFixed(1)} dB`;

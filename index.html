@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TD-17 link tester</title>
 <style>
-  :root { color-scheme: light dark; --bg:#f5f5f3; --card:#fff; --text:#1c1c1a; --muted:#6b6b66; --line:#d9d9d4; --accent:#d2491f; --ok:#1d7a3e; --bad:#b3261e; --level:#3d9fe6; --level-detail:#2c6fb0; --pan:#3fb573; --track:#dcdcd6; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --card:#222220; --text:#ecece8; --muted:#9a9a94; --line:#3a3a37; --accent:#ff7a4d; --ok:#5fcf85; --bad:#ff8a80; --level:#6cc0f7; --level-detail:#3f86c4; --pan:#7ddba0; --track:#44443f; } }
+  :root { color-scheme: light dark; --bg:#f5f5f3; --card:#fff; --text:#1c1c1a; --muted:#6b6b66; --line:#d9d9d4; --accent:#d2491f; --ok:#1d7a3e; --bad:#b3261e; --level:#3d9fe6; --level-detail:#2c6fb0; --pan:#3fb573; --track:#dcdcd6; --spread:#ec6a00; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --card:#222220; --text:#ecece8; --muted:#9a9a94; --line:#3a3a37; --accent:#ff7a4d; --ok:#5fcf85; --bad:#ff8a80; --level:#6cc0f7; --level-detail:#3f86c4; --pan:#7ddba0; --track:#44443f; --spread:#ffa040; } }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:16px/1.4 system-ui, sans-serif; }
@@ -39,13 +39,25 @@
     --pos: calc(10px + (100% - 20px) * var(--frac, 0));
     --from: 0%; --to: var(--pos); --fill: var(--level);
     --paint: linear-gradient(to right, var(--track) 0 var(--from), var(--fill) var(--from) var(--to), var(--track) var(--to) 100%);
+    --band: linear-gradient(transparent, transparent);
+  }
+  /* Spread band on the pad-wide sliders: orange from the lowest to the highest value that
+     disagrees (fractions set from script), using the same thumb-centre geometry as --pos.
+     It is drawn over the fill; the thumb gets an orange ring too, since a narrow band can
+     hide under the thumb. */
+  .slider.spread input[type=range] {
+    --band-lo: calc(10px + (100% - 20px) * var(--band-from, 0));
+    --band-hi: calc(10px + (100% - 20px) * var(--band-to, 0));
+    --band: linear-gradient(to right, transparent 0 var(--band-lo), var(--spread) var(--band-lo) var(--band-hi), transparent var(--band-hi) 100%);
   }
   .slider.level.detail input[type=range] { --fill: var(--level-detail); }
   .slider.pan input[type=range] { --from: min(50%, var(--pos)); --to: max(50%, var(--pos)); --fill: var(--pan); }
-  .slider input[type=range]::-webkit-slider-runnable-track { height:6px; border-radius:3px; background:var(--paint); }
-  .slider input[type=range]::-moz-range-track { height:6px; border-radius:3px; background:var(--paint); }
+  .slider input[type=range]::-webkit-slider-runnable-track { height:6px; border-radius:3px; background:var(--band), var(--paint); }
+  .slider input[type=range]::-moz-range-track { height:6px; border-radius:3px; background:var(--band), var(--paint); }
   .slider input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; margin-top:-7px; border-radius:50%; background:var(--fill); border:2px solid var(--card); box-shadow:0 0 0 1px var(--line); }
   .slider input[type=range]::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:var(--fill); border:2px solid var(--card); box-shadow:0 0 0 1px var(--line); }
+  .slider.spread input[type=range]::-webkit-slider-thumb { box-shadow:0 0 0 2px var(--spread); }
+  .slider.spread input[type=range]::-moz-range-thumb { box-shadow:0 0 0 2px var(--spread); }
   .slider input[type=range]:focus-visible { outline:2px solid var(--fill); outline-offset:2px; border-radius:6px; }
   .slider.detail .name { padding-left:.8em; }
   label { font-size:14px; color:var(--muted); display:flex; gap:6px; align-items:center; }
@@ -54,7 +66,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v17</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v18</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -110,7 +122,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=17'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=18'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -437,6 +449,7 @@ function setSubOn(p, on) {
   p.deferred = !on; // a sub that is off can't be heard, so it is only written when a drag ends
   p.label = on ? 'Sub' : 'Sub (off)';
   if (p.row) p.row.querySelector('.name').textContent = p.label;
+  if (p.combo?.row) paintSpread(p.combo);
 }
 
 async function readGroupInner(current) {
@@ -448,15 +461,20 @@ async function readGroupInner(current) {
   for (const u of group.units) {
     const name = td.UNITS[u];
     const subOn = (await current(request(td.address.subSwitch(kit, u), 1)))[0] === 1;
+    const main = volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main'));
+    main.kind = 'main';
     const sub = volumeParam(`${u}s`, name, 'Sub', td.address.volume(kit, u, 'sub'));
+    sub.kind = 'sub';
+    sub.main = main; // the spread band compares a sub with its own zone's main
     sub.switchAddr = td.address.subSwitch(kit, u);
     setSubOn(sub, subOn);
-    mains.push(volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main')));
+    mains.push(main);
     subs.push(sub);
-    pans.push(panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)));
+    pans.push(Object.assign(panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)), { kind: 'pan' }));
   }
   for (const x of group.extras ?? []) {
     const extra = volumeParam(x, td.EXTRA_LABELS[x], 'Volume', td.address[x](kit));
+    extra.kind = 'extra';
     extra.deferred = true; // only heard on its own articulation, so written when a drag ends
     extras.push(extra);
   }
@@ -512,6 +530,19 @@ function syncCombo(combo) {
   combo.input.value = level;
   paint(combo.input);
   combo.out.textContent = combo.format(level);
+  paintSpread(combo);
+}
+
+// Shows, in orange on a pad-wide slider, how far the values under it disagree.
+function paintSpread(combo) {
+  const leader = combo.layers[combo.blend.leader].value;
+  const band = td.spreadBand(leader, combo.layers.map((p) =>
+    ({ kind: p.kind, value: p.value, main: p.main?.value, on: !p.deferred })));
+  combo.row.classList.toggle('spread', Boolean(band));
+  if (!band) return;
+  const { min, max } = combo.range;
+  combo.input.style.setProperty('--band-from', (band.min - min) / (max - min));
+  combo.input.style.setProperty('--band-to', (band.max - min) / (max - min));
 }
 
 function renderSliders() {
@@ -536,6 +567,7 @@ function renderSliders() {
         if (p.deferred) p.dirty = true;
         else queueWrite(p.id, writeBytes(p, value));
       });
+      paintSpread(combo);
     };
     c.input.onchange = () => {
       for (const p of combo.layers) {

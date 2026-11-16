@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   dt1, rq1, parseDt1, parseIdentityReply, encodeNibbles, decodeNibbles, address,
   bleEncodeSysex, BleMidiParser, hex, GROUPS, UNITS, captureBlend, applyBlend, PAN_RANGE,
+  spreadBand, VOLUME_MIN,
 } from './td17.js';
 
 test("Roland's worked DT1 example", () => {
@@ -103,4 +104,36 @@ test('BLE parser handles notes, running status and real-time bytes', () => {
   // header, ts, note on, ts, running-status note, ts, active sensing
   const out = parser.push([0x80, 0x81, 0x99, 0x26, 0x64, 0x82, 0x24, 0x40, 0x83, 0xfe]);
   assert.deepEqual(out, [[0x99, 0x26, 0x64], [0x99, 0x24, 0x40], [0xfe]]);
+});
+
+test('spread band: equal mains, differing mains, -INF', () => {
+  const main = (value) => ({ kind: 'main', value });
+  assert.equal(spreadBand(0, [main(0), main(0), main(0)]), null);
+  assert.deepEqual(spreadBand(0, [main(0), main(-30)]), { min: -30, max: 0 });
+  assert.deepEqual(spreadBand(-20, [main(-20), main(5), main(-60)]), { min: -60, max: 5 });
+  assert.deepEqual(spreadBand(0, [main(0), main(-1)]), { min: -1, max: 0 }); // no threshold
+  assert.deepEqual(spreadBand(10, [main(VOLUME_MIN), main(10)]), { min: VOLUME_MIN, max: 10 });
+});
+
+test('spread band: subs count only when on and 3 dB or more from their own main', () => {
+  const head = { kind: 'main', value: 0 };
+  const sub = (value, on, ownMain = 0) => ({ kind: 'sub', value, main: ownMain, on });
+  assert.equal(spreadBand(0, [head, sub(-20, true)]), null); // 2 dB: ignored
+  assert.equal(spreadBand(0, [head, sub(29, true)]), null);
+  assert.deepEqual(spreadBand(0, [head, sub(-30, true)]), { min: -30, max: 0 });
+  assert.deepEqual(spreadBand(0, [head, sub(45, true)]), { min: 0, max: 45 });
+  assert.equal(spreadBand(0, [head, sub(-300, false)]), null); // off: ignored
+  assert.equal(spreadBand(0, [head, sub(VOLUME_MIN, false)]), null);
+  assert.deepEqual(spreadBand(0, [head, sub(VOLUME_MIN, true)]), { min: VOLUME_MIN, max: 0 });
+  // Measured against its own zone's main, not the leader.
+  assert.equal(spreadBand(0, [head, { kind: 'main', value: 0 }, sub(-40, true, -30)]), null);
+});
+
+test('spread band: extras never count; pan compares zone pans', () => {
+  const head = { kind: 'main', value: 0 };
+  assert.equal(spreadBand(0, [head, { kind: 'extra', value: -400 }]), null);
+  const pan = (value) => ({ kind: 'pan', value });
+  assert.equal(spreadBand(-5, [pan(-5), pan(-5)]), null);
+  assert.deepEqual(spreadBand(-5, [pan(-5), pan(12)]), { min: -5, max: 12 });
+  assert.deepEqual(spreadBand(0, [pan(0), pan(-30), pan(4)]), { min: -30, max: 4 });
 });
