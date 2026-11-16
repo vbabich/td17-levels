@@ -53,7 +53,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v14</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v15</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -109,7 +109,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=14'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=15'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -239,6 +239,14 @@ function setConnected(name) {
   }
 }
 
+let bleCleanup = null;
+
+function reloadKeepingLog() {
+  log('Reloading the page for a clean Bluetooth state');
+  try { sessionStorage.setItem('log', $('log').textContent); } catch { /* private mode */ }
+  location.reload();
+}
+
 async function connectBle() {
   if (!navigator.bluetooth) throw new Error('This browser has no Web Bluetooth. Use Chrome on Android or desktop.');
   const options = $('allDevices').checked
@@ -249,19 +257,22 @@ async function connectBle() {
   let retries = 0;
   let closing = false;
   let connectedAt = 0;
-  device.addEventListener('gattserverdisconnected', async () => {
+  bleCleanup?.(); // the browser hands back the same device object; don't stack listeners on it
+  const onDisconnected = async () => {
     const after = connectedAt ? `${((performance.now() - connectedAt) / 1000).toFixed(1)} s after connecting` : 'during setup';
     log(`Bluetooth: disconnected ${after}`);
     setConnected(null);
     if (closing) return; // the user pressed Disconnect
     // A first connection often drops once while the phone and module pair; retry a few times.
-    if (retries >= 3) { setResult('connStatus', 'Connection keeps dropping. Copy the log.', 'bad'); return; }
+    if (retries >= 3) { setResult('connStatus', 'Connection keeps dropping. Reload the page and try again.', 'bad'); return; }
     retries++;
     setResult('connStatus', `Dropped, reconnecting (attempt ${retries} of 3)…`);
     await sleep(700);
     try { await openGatt(); }
-    catch (e) { log(`ERROR reconnect: ${e.message}`); setResult('connStatus', e.message, 'bad'); }
-  });
+    catch (e) { log(`ERROR reconnect: ${e.message}`); setResult('connStatus', `${e.message} Reload the page and try again.`, 'bad'); }
+  };
+  device.addEventListener('gattserverdisconnected', onDisconnected);
+  bleCleanup = () => device.removeEventListener('gattserverdisconnected', onDisconnected);
 
   async function openGatt() {
     connectedAt = 0;
@@ -315,6 +326,9 @@ async function connectBle() {
         device.gatt.disconnect();
         log(`Bluetooth: gatt.connected is now ${device.gatt.connected}`);
         setConnected(null);
+        // Reconnecting from the same page load fails on Android Chrome (the module
+        // drops the link after 5 s), while a fresh page load connects fine. So start fresh.
+        reloadKeepingLog();
       },
     };
     connectedAt = performance.now();
@@ -639,6 +653,10 @@ if (new URLSearchParams(location.search).has('sim')) {
   $('connectUsb').after(b);
 }
 
+try {
+  const saved = sessionStorage.getItem('log');
+  if (saved) { $('log').textContent = saved; sessionStorage.removeItem('log'); }
+} catch { /* private mode */ }
 if (!window.isSecureContext) log('This page is not in a secure context (needs https or localhost); Bluetooth and MIDI will be unavailable.');
 </script>
 </body>
