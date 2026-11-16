@@ -1,0 +1,6 @@
+{
+  "name": "td17-levels",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test", "serve": "python3 -m http.server 8017 --bind 127.0.0.1" }
+}

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TD-17 link tester</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f5f5f3; --card:#fff; --text:#1c1c1a; --muted:#6b6b66; --line:#d9d9d4; --accent:#d2491f; --ok:#1d7a3e; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --card:#222220; --text:#ecece8; --muted:#9a9a94; --line:#3a3a37; --accent:#ff7a4d; --ok:#5fcf85; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:16px/1.4 system-ui, sans-serif; }
+  main { max-width:560px; margin:0 auto; display:grid; gap:12px; }
+  h1 { font-size:20px; margin:4px 0; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; display:grid; gap:10px; }
+  h2 { font-size:15px; margin:0; }
+  p { margin:0; color:var(--muted); font-size:14px; }
+  button { font:inherit; padding:10px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.45; }
+  select, input[type=text] { font:inherit; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); min-width:0; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .row > select { flex:1; }
+  .result { font-weight:600; min-height:1.4em; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  .value { font-variant-numeric:tabular-nums; font-weight:600; min-width:5.5em; text-align:right; }
+  label { font-size:14px; color:var(--muted); display:flex; gap:6px; align-items:center; }
+  #log { font:12px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-all; max-height:260px; overflow:auto; margin:0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TD-17 link tester</h1>
+
+  <section>
+    <h2>1. Connect</h2>
+    <p>On the module: SETUP → Bluetooth → Bluetooth MIDI on. Do not pair it in the phone's Bluetooth settings; connect from here.</p>
+    <div class="row">
+      <button class="primary" id="connectBle">Connect via Bluetooth</button>
+      <button id="connectUsb">Connect via USB</button>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="allDevices"> List all Bluetooth devices</label>
+      <label>Device ID (hex) <input type="text" id="deviceId" value="10" size="3" maxlength="2"></label>
+    </div>
+    <div class="row" id="usbPorts" hidden>
+      <select id="usbOut" aria-label="USB MIDI output"></select>
+      <select id="usbIn" aria-label="USB MIDI input"></select>
+    </div>
+    <div class="result" id="connStatus">Not connected</div>
+  </section>
+
+  <section>
+    <h2>2. Does it answer SysEx?</h2>
+    <div class="row"><button id="identity" disabled>Send identity request</button></div>
+    <div class="result" id="identityResult"></div>
+  </section>
+
+  <section>
+    <h2>3. Read current kit</h2>
+    <div class="row"><button id="readKit" disabled>Read kit number</button></div>
+    <div class="result" id="kitResult"></div>
+  </section>
+
+  <section>
+    <h2>4. Read and write one pad</h2>
+    <p>Writes change the stored kit. Read first; "Restore" puts the original values back.</p>
+    <div class="row">
+      <select id="unit" aria-label="Pad"></select>
+      <select id="layer" aria-label="Layer"><option value="main">Main layer</option><option value="sub">Sub layer</option></select>
+    </div>
+    <div class="row">
+      <button id="readPad" disabled>Read volume and pan</button>
+      <button id="restorePad" disabled>Restore</button>
+    </div>
+    <div class="row"><input type="range" id="volume" min="-601" max="60" value="0" disabled aria-label="Volume"><span class="value" id="volumeValue">–</span></div>
+    <div class="row"><input type="range" id="pan" min="-30" max="30" value="0" disabled aria-label="Pan"><span class="value" id="panValue">–</span></div>
+    <div class="result" id="padResult"></div>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div class="row"><button id="copyLog">Copy log</button><button id="clearLog">Clear</button></div>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script type="module">
+import * as td from './td17.js';
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const MIN_GAP_MS = 20; // Roland: leave at least 20 ms between DT1 messages
+
+let transport = null; // { name, send(bytes) }
+let kit = null;       // 0-99 once read
+let original = null;  // { key, volume, pan } as read from the module
+const waiters = [];   // pending replies: { match(msg), resolve }
+
+// ---------- log ----------
+function log(line) {
+  const t = new Date().toLocaleTimeString([], { hour12: false });
+  $('log').textContent += `${t} ${line}\n`;
+  $('log').scrollTop = $('log').scrollHeight;
+}
+function setResult(id, text, cls = '') {
+  $(id).textContent = text;
+  $(id).className = `result ${cls}`;
+}
+
+// ---------- sending (serialised, spaced) ----------
+let chain = Promise.resolve();
+function send(bytes) {
+  chain = chain.catch(() => {}).then(async () => {
+    if (!transport) throw new Error('Not connected');
+    log(`TX ${td.hex(bytes)}`);
+    await transport.send(bytes);
+    await sleep(MIN_GAP_MS);
+  });
+  return chain;
+}
+
+// Latest-wins queue for slider moves: one pending write per parameter.
+const pendingWrites = new Map();
+let pumping = false;
+async function queueWrite(key, bytes) {
+  pendingWrites.set(key, bytes);
+  if (pumping) return;
+  pumping = true;
+  try {
+    while (pendingWrites.size) {
+      const [k, b] = pendingWrites.entries().next().value;
+      pendingWrites.delete(k);
+      await send(b);
+    }
+  } catch (e) {
+    log(`ERROR ${e.message}`);
+  } finally {
+    pumping = false;
+  }
+}
+
+function waitFor(match, timeoutMs = 2000) {
+  return new Promise((resolve, reject) => {
+    const w = { match, resolve };
+    waiters.push(w);
+    setTimeout(() => {
+      const i = waiters.indexOf(w);
+      if (i >= 0) { waiters.splice(i, 1); reject(new Error('No reply within 2 s')); }
+    }, timeoutMs);
+  });
+}
+
+function onMidi(msg) {
+  if (msg[0] >= 0xf8) return; // clock / active sensing
+  log(`RX ${td.hex(msg)}`);
+  for (let i = waiters.length - 1; i >= 0; i--) {
+    const r = waiters[i].match(msg);
+    if (r) { waiters[i].resolve(r); waiters.splice(i, 1); }
+  }
+}
+
+function deviceId() {
+  const v = parseInt($('deviceId').value, 16);
+  return Number.isInteger(v) && v >= 0 && v <= 0x7f ? v : td.DEFAULT_DEVICE_ID;
+}
+
+async function request(address, size) {
+  const reply = waitFor((msg) => {
+    const d = td.parseDt1(msg);
+    return d && d.address.every((b, i) => b === address[i]) ? d : null;
+  });
+  await send(td.rq1(deviceId(), address, size));
+  const d = await reply;
+  if (!d.checksumOk) throw new Error('Reply had a bad checksum');
+  return d.data;
+}
+
+// ---------- transports ----------
+function setConnected(name) {
+  transport && (transport.name = name);
+  $('connStatus').textContent = name ? `Connected: ${name}` : 'Not connected';
+  $('connStatus').className = `result ${name ? 'ok' : ''}`;
+  for (const id of ['identity', 'readKit', 'readPad']) $(id).disabled = !name;
+  if (!name) { transport = null; setPadEnabled(false); }
+}
+
+async function connectBle() {
+  if (!navigator.bluetooth) throw new Error('This browser has no Web Bluetooth. Use Chrome on Android or desktop.');
+  const options = $('allDevices').checked
+    ? { acceptAllDevices: true, optionalServices: [td.BLE_MIDI_SERVICE] }
+    : { filters: [{ services: [td.BLE_MIDI_SERVICE] }, { namePrefix: 'TD-17' }], optionalServices: [td.BLE_MIDI_SERVICE] };
+  const device = await navigator.bluetooth.requestDevice(options);
+  log(`Bluetooth: selected "${device.name}"`);
+  device.addEventListener('gattserverdisconnected', () => { log('Bluetooth: disconnected'); setConnected(null); });
+  const server = await device.gatt.connect();
+  const service = await server.getPrimaryService(td.BLE_MIDI_SERVICE);
+  const ch = await service.getCharacteristic(td.BLE_MIDI_CHARACTERISTIC);
+  const parser = new td.BleMidiParser();
+  ch.addEventListener('characteristicvaluechanged', (e) => {
+    const v = e.target.value;
+    const packet = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+    for (const msg of parser.push(packet)) onMidi(msg);
+  });
+  await ch.startNotifications();
+  try { await ch.readValue(); } catch { /* optional initial read; some devices refuse it */ }
+  transport = {
+    async send(bytes) {
+      for (const packet of td.bleEncodeSysex(bytes, performance.now())) {
+        const data = Uint8Array.from(packet);
+        if (ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(data);
+        else await ch.writeValue(data);
+      }
+    },
+  };
+  setConnected(`${device.name || 'Bluetooth device'} (Bluetooth)`);
+}
+
+let midiAccess = null;
+async function connectUsb() {
+  if (!navigator.requestMIDIAccess) throw new Error('This browser has no Web MIDI. Use Chrome.');
+  midiAccess = await navigator.requestMIDIAccess({ sysex: true });
+  const fill = (select, ports) => {
+    select.replaceChildren(...[...ports.values()].map((p) => new Option(p.name, p.id)));
+    const match = [...ports.values()].find((p) => /TD-17/i.test(p.name));
+    if (match) select.value = match.id;
+  };
+  fill($('usbOut'), midiAccess.outputs);
+  fill($('usbIn'), midiAccess.inputs);
+  $('usbPorts').hidden = false;
+  if (!midiAccess.outputs.size || !midiAccess.inputs.size) throw new Error('No MIDI ports found. Is the USB cable connected?');
+  useUsbPorts();
+}
+function useUsbPorts() {
+  for (const input of midiAccess.inputs.values()) input.onmidimessage = null;
+  const out = midiAccess.outputs.get($('usbOut').value);
+  const input = midiAccess.inputs.get($('usbIn').value);
+  input.onmidimessage = (e) => onMidi(Array.from(e.data));
+  transport = { async send(bytes) { out.send(bytes); } };
+  setConnected(`${out.name} (USB)`);
+}
+
+// ---------- steps ----------
+async function identity() {
+  setResult('identityResult', 'Waiting…');
+  const reply = waitFor((msg) => td.parseIdentityReply(msg));
+  await send(td.identityRequest());
+  const r = await reply;
+  $('deviceId').value = r.deviceId.toString(16).toUpperCase().padStart(2, '0');
+  setResult('identityResult',
+    r.isTd17 ? `TD-17 replied. Device ID ${td.hex([r.deviceId])}, revision ${td.hex(r.revision)}.`
+             : `Something replied, but not a TD-17 (manufacturer ${td.hex([r.manufacturer])}).`,
+    r.isTd17 ? 'ok' : 'bad');
+}
+
+async function readKit() {
+  setResult('kitResult', 'Waiting…');
+  const data = await request(td.address.currentKit(), 1);
+  kit = data[0];
+  setResult('kitResult', `Current kit: ${kit + 1}`, 'ok');
+  return kit;
+}
+
+function padKey() { return `${kit}/${$('unit').value}/${$('layer').value}`; }
+function setPadEnabled(on) {
+  for (const id of ['volume', 'pan']) $(id).disabled = !on;
+  $('restorePad').disabled = !on;
+}
+function showPad(volume, pan) {
+  $('volume').value = volume; $('volumeValue').textContent = td.formatVolume(volume);
+  $('pan').value = pan; $('panValue').textContent = td.formatPan(pan);
+}
+
+async function readPad() {
+  setResult('padResult', 'Waiting…');
+  await readKit();
+  const unit = +$('unit').value, layer = $('layer').value;
+  const volume = td.decodeNibbles(await request(td.address.volume(kit, unit, layer), 4));
+  const pan = td.decodeNibbles(await request(td.address.pan(kit, unit), 2));
+  original = { key: padKey(), kit, unit, layer, volume, pan };
+  showPad(volume, pan);
+  setPadEnabled(true);
+  setResult('padResult', `Kit ${kit + 1}, ${td.UNITS[unit]}: ${td.formatVolume(volume)}, pan ${td.formatPan(pan)}`, 'ok');
+}
+
+function writeVolume(value) {
+  const { kit, unit, layer } = original;
+  queueWrite('volume', td.dt1(deviceId(), td.address.volume(kit, unit, layer), td.encodeNibbles(value, 4)));
+}
+function writePan(value) {
+  const { kit, unit } = original;
+  queueWrite('pan', td.dt1(deviceId(), td.address.pan(kit, unit), td.encodeNibbles(value, 2)));
+}
+
+// ---------- wiring ----------
+$('unit').replaceChildren(...td.UNITS.map((name, i) => new Option(name, i)));
+$('unit').value = 1;
+
+function run(fn, resultId) {
+  return async () => {
+    try { await fn(); }
+    catch (e) {
+      log(`ERROR ${e.message}`);
+      if (resultId) setResult(resultId, e.message, 'bad');
+    }
+  };
+}
+$('connectBle').onclick = run(connectBle, 'connStatus');
+$('connectUsb').onclick = run(connectUsb, 'connStatus');
+$('usbOut').onchange = $('usbIn').onchange = run(useUsbPorts, 'connStatus');
+$('identity').onclick = run(identity, 'identityResult');
+$('readKit').onclick = run(readKit, 'kitResult');
+$('readPad').onclick = run(readPad, 'padResult');
+$('unit').onchange = $('layer').onchange = () => { setPadEnabled(false); setResult('padResult', ''); };
+$('volume').oninput = (e) => { $('volumeValue').textContent = td.formatVolume(+e.target.value); writeVolume(+e.target.value); };
+$('pan').oninput = (e) => { $('panValue').textContent = td.formatPan(+e.target.value); writePan(+e.target.value); };
+$('restorePad').onclick = () => { showPad(original.volume, original.pan); writeVolume(original.volume); writePan(original.pan); };
+$('clearLog').onclick = () => { $('log').textContent = ''; };
+$('copyLog').onclick = () => navigator.clipboard.writeText($('log').textContent);
+
+if (!window.isSecureContext) log('This page is not in a secure context (needs https or localhost); Bluetooth and MIDI will be unavailable.');
+</script>
+</body>
+</html>
