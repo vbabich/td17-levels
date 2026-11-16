@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   dt1, rq1, parseDt1, parseIdentityReply, encodeNibbles, decodeNibbles, address,
-  bleEncodeSysex, BleMidiParser, hex, GROUPS, UNITS, captureBlend, applyBlend,
+  bleEncodeSysex, BleMidiParser, hex, GROUPS, UNITS, captureBlend, applyBlend, PAN_RANGE,
 } from './td17.js';
 
 test("Roland's worked DT1 example", () => {
@@ -50,6 +50,19 @@ test('combined level leaves a muted layer alone', () => {
   assert.equal(subLeads.leader, 1);
   assert.deepEqual(applyBlend(subLeads, 0), [null, 0]);
   assert.deepEqual(applyBlend(captureBlend([-601, -601]), -40), [-40, -40]);
+});
+
+test('combined pan keeps differences and clamps at the edges', () => {
+  const blend = captureBlend([-8, 25], PAN_RANGE);
+  assert.deepEqual(applyBlend(blend, 0), [0, 30]);
+  assert.deepEqual(applyBlend(blend, -30), [-30, 3]);
+  assert.deepEqual(applyBlend(blend, -8), [-8, 25]);
+});
+
+test('combined level across head, rim and their subs', () => {
+  // order: head main, rim main, head sub, rim sub (muted)
+  const blend = captureBlend([-50, -30, -110, -601]);
+  assert.deepEqual(applyBlend(blend, -100), [-100, -80, -160, null]);
 });
 
 test('nibble encoding round-trips signed values', () => {

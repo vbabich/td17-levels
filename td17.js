@@ -107,24 +107,30 @@ export const address = {
   volume: (kit, unit, layer = 'main') => [...kitBase(kit), (layer === 'sub' ? 0x60 : 0x40) + unit, 0x04],
 };
 
-// ---- Combined level: move several layer volumes together, keeping their balance ----
+// ---- Combined sliders: move several values together, keeping their differences ----
 
-// Captures the balance between layer volumes (e.g. [main, sub]). A layer at -INF is
-// "pinned": the combined level leaves it alone, unless every layer is at -INF.
-export function captureBlend(values) {
-  let pinned = values.map((v) => v <= VOLUME_MIN);
+export const VOLUME_RANGE = { min: VOLUME_MIN, max: VOLUME_MAX, mute: true }; // min means -INF
+export const PAN_RANGE = { min: PAN_MIN, max: PAN_MAX, mute: false };
+
+// Captures the differences between values (e.g. head/rim, main/sub volumes). The first
+// usable value is the "leader": the combined slider shows and sets it, and the others
+// follow at their captured offsets. For volumes, a value at -INF is "pinned": the
+// combined slider leaves it alone, unless every value is at -INF.
+export function captureBlend(values, range = VOLUME_RANGE) {
+  let pinned = values.map((v) => range.mute && v <= range.min);
   if (pinned.every(Boolean)) pinned = values.map(() => false);
   const leader = pinned.indexOf(false);
-  return { leader, pinned, offsets: values.map((v, i) => (pinned[i] ? 0 : v - values[leader])) };
+  return { range, leader, pinned, offsets: values.map((v, i) => (pinned[i] ? 0 : v - values[leader])) };
 }
 
-// New value for each layer when the combined level (the leader's volume) is set.
-// Pinned layers get null, meaning "leave unchanged".
+// New value for each entry when the combined slider is set to `level`.
+// Pinned entries get null, meaning "leave unchanged".
 export function applyBlend(blend, level) {
+  const { min, max, mute } = blend.range;
   return blend.offsets.map((offset, i) => {
     if (blend.pinned[i]) return null;
-    if (level <= VOLUME_MIN) return VOLUME_MIN;
-    return Math.min(VOLUME_MAX, Math.max(VOLUME_MIN + 1, level + offset));
+    if (mute && level <= min) return min; // bottom of a volume slider mutes everything
+    return Math.min(max, Math.max(mute ? min + 1 : min, level + offset));
   });
 }
 

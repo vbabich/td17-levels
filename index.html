@@ -31,6 +31,7 @@
   .slider .name { color:var(--muted); }
   .slider.mismatch .value { color:var(--bad); }
   #sliders:not(.separate) .detail { display:none; }
+  #sliders h3.detail { font-size:13px; color:var(--muted); font-weight:600; }
   /* Custom-drawn range inputs: --frac (0..1) is set from script; the fill runs
      from the left edge for levels and from the centre for pan. */
   .slider input[type=range] {
@@ -53,7 +54,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v15</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v16</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -94,7 +95,7 @@
       <button id="readPad" disabled>Read</button>
       <button id="restorePad" disabled>Restore</button>
       <button id="latency" disabled>Latency test</button>
-      <label><input type="checkbox" id="separate"> Main / Sub</label>
+      <label><input type="checkbox" id="separate"> Details</label>
     </div>
     <div id="sliders"></div>
     <div class="result" id="padResult"></div>
@@ -109,7 +110,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=15'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=16'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -119,6 +120,8 @@ let transport = null; // { name, send(bytes) }
 let kit = null;       // 0-99 once read
 let params = [];      // sliders currently shown: { id, section, label, addr, size, value, original, ... }
 let loadedKit = null; // kit the sliders were read from
+let loadedGroup = ''; // name of the pad group on screen
+let combos = [];      // the pad-wide Level and Pan sliders, each driving several params
 const waiters = [];   // pending replies: { match(msg), resolve }
 
 // ---------- log ----------
@@ -196,13 +199,19 @@ function applyModuleEdit(msg) {
   const d = td.parseDt1(msg);
   if (!d || !d.checksumOk) return;
   if (d.address.every((b) => b === 0)) { run(readGroup, 'padResult')(); return; } // current kit number
+  const covers = (addr, size) => {
+    const offset = addr[3] - d.address[3];
+    const sameBlock = addr.slice(0, 3).every((b, i) => b === d.address[i]);
+    return sameBlock && offset >= 0 && offset + size <= d.data.length ? offset : -1;
+  };
   for (const p of params) {
-    const offset = p.addr[3] - d.address[3];
-    const sameBlock = p.addr.slice(0, 3).every((b, i) => b === d.address[i]);
-    if (!sameBlock || offset < 0 || offset + p.size > d.data.length) continue;
+    const switchAt = p.switchAddr ? covers(p.switchAddr, 1) : -1;
+    if (switchAt >= 0) setSubOn(p, d.data[switchAt] === 1); // sub instrument switched on or off
+    const offset = covers(p.addr, p.size);
+    if (offset < 0) continue;
     if (performance.now() - (p.touched ?? 0) < 500) continue; // don't fight a slider being dragged
     setParamValue(p, td.decodeNibbles(d.data.slice(offset, offset + p.size)));
-    if (p.combo) syncCombo(p.combo);
+    syncCombo(p.combo);
     setResult('padResult', `${p.section} ${p.label} changed on the module: ${p.format(p.value)}`, 'ok');
   }
 }
@@ -397,7 +406,7 @@ async function readKit() {
 
 function setPadEnabled(on) {
   $('restorePad').disabled = $('latency').disabled = !on;
-  if (!on) { params = []; $('sliders').replaceChildren(); }
+  if (!on) { params = []; combos = []; $('sliders').replaceChildren(); }
 }
 
 const volumeParam = (id, section, label, addr) =>
@@ -424,26 +433,45 @@ async function readGroup() {
   }
 }
 
+function setSubOn(p, on) {
+  p.deferred = !on; // a sub that is off can't be heard, so it is only written when a drag ends
+  p.label = on ? 'Sub' : 'Sub (off)';
+  if (p.row) p.row.querySelector('.name').textContent = p.label;
+}
+
 async function readGroupInner(current) {
   setPadEnabled(false);
   setResult('padResult', 'Reading…');
   await current(readKit());
   const group = td.GROUPS[+$('group').value];
-  const list = [];
+  const mains = [], subs = [], pans = [], extras = [];
   for (const u of group.units) {
     const name = td.UNITS[u];
     const subOn = (await current(request(td.address.subSwitch(kit, u), 1)))[0] === 1;
-    const main = volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main'));
-    const sub = volumeParam(`${u}s`, name, subOn ? 'Sub' : 'Sub (off)', td.address.volume(kit, u, 'sub'));
-    main.combo = sub.combo = { section: name, layers: [main, sub] }; // one Level slider drives both
-    list.push(main, sub, panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)));
+    const sub = volumeParam(`${u}s`, name, 'Sub', td.address.volume(kit, u, 'sub'));
+    sub.switchAddr = td.address.subSwitch(kit, u);
+    setSubOn(sub, subOn);
+    mains.push(volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main')));
+    subs.push(sub);
+    pans.push(panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)));
   }
   for (const x of group.extras ?? []) {
-    list.push(volumeParam(x, `${td.EXTRA_LABELS[x]} (kit-wide)`, 'Volume', td.address[x](kit)));
+    const extra = volumeParam(x, `${td.EXTRA_LABELS[x]} (kit-wide)`, 'Volume', td.address[x](kit));
+    extra.deferred = true; // only heard on its own articulation, so written when a drag ends
+    extras.push(extra);
   }
+  // Display order: each zone's main, sub and pan, then the kit-wide extras.
+  const list = [...mains.flatMap((m, i) => [m, subs[i], pans[i]]), ...extras];
   for (const p of list) p.original = p.value = await current(readParam(p));
   params = list;
+  // One Level and one Pan for the whole pad. The first entry leads: head main, head pan.
+  combos = [
+    { label: 'Level', range: td.VOLUME_RANGE, format: td.formatVolume, layers: [...mains, ...subs, ...extras] },
+    { label: 'Pan', range: td.PAN_RANGE, format: td.formatPan, layers: pans },
+  ];
+  for (const combo of combos) for (const p of combo.layers) p.combo = combo;
   loadedKit = kit;
+  loadedGroup = group.name;
   renderSliders();
   setPadEnabled(true);
   setResult('padResult', `Kit ${kit + 1}, ${group.name}: read ${list.length} values`, 'ok');
@@ -476,68 +504,89 @@ function setParamValue(p, value) {
   p.row.classList.remove('mismatch');
 }
 
-// Re-captures the main/sub balance and moves the Level slider to match.
+// Re-captures the differences between a combined slider's values and moves it to match.
 function syncCombo(combo) {
   const values = combo.layers.map((p) => p.value);
-  combo.blend = td.captureBlend(values);
+  combo.blend = td.captureBlend(values, combo.range);
   const level = values[combo.blend.leader];
   combo.input.value = level;
   paint(combo.input);
-  combo.out.textContent = td.formatVolume(level);
+  combo.out.textContent = combo.format(level);
 }
 
 function renderSliders() {
   const box = $('sliders');
   box.replaceChildren();
+  if (!params.length) return;
+  const heading = (text, detail) =>
+    Object.assign(document.createElement('h3'), { textContent: text, className: detail ? 'detail' : '' });
+
+  box.append(heading(loadedGroup, false));
+  for (const combo of combos) {
+    const c = makeRow(loadedGroup, combo.label, combo.range.min, combo.range.max, 0, combo.format);
+    Object.assign(combo, c);
+    c.input.oninput = () => {
+      const level = +c.input.value;
+      c.out.textContent = combo.format(level);
+      td.applyBlend(combo.blend, level).forEach((value, i) => {
+        const p = combo.layers[i];
+        if (value === null || value === p.value) return;
+        setParamValue(p, value);
+        p.touched = performance.now();
+        if (p.deferred) p.dirty = true;
+        else queueWrite(p.id, writeBytes(p, value));
+      });
+    };
+    c.input.onchange = () => {
+      for (const p of combo.layers) {
+        if (!p.dirty) continue;
+        p.dirty = false;
+        queueWrite(p.id, writeBytes(p, p.value));
+      }
+      confirmParams(combo.layers, `${loadedGroup} ${combo.label}`);
+    };
+    box.append(c.row);
+  }
+
   let section = null;
   for (const p of params) {
     if (p.section !== section) {
       section = p.section;
-      box.append(Object.assign(document.createElement('h3'), { textContent: section }));
+      box.append(heading(section, true));
     }
-    const combo = p.combo;
-    if (combo && combo.layers[0] === p) {
-      // Level: moves main and sub together, keeping their balance.
-      const c = makeRow(p.section, 'Level', td.VOLUME_MIN, td.VOLUME_MAX, 0, td.formatVolume);
-      Object.assign(combo, c);
-      c.input.oninput = () => {
-        const level = +c.input.value;
-        c.out.textContent = td.formatVolume(level);
-        td.applyBlend(combo.blend, level).forEach((value, i) => {
-          if (value === null) return;
-          const layer = combo.layers[i];
-          setParamValue(layer, value);
-          layer.touched = performance.now();
-          queueWrite(layer.id, writeBytes(layer, value));
-        });
-      };
-      c.input.onchange = async () => { for (const layer of combo.layers) await confirmParam(layer); };
-      box.append(c.row);
-    }
-    const r = makeRow(p.section, p.label, p.min, p.max, p.value, p.format, !!combo);
+    const r = makeRow(p.section, p.label, p.min, p.max, p.value, p.format, true);
     Object.assign(p, r);
     r.input.oninput = () => {
       setParamValue(p, +r.input.value);
       p.touched = performance.now();
-      if (combo) syncCombo(combo);
+      p.dirty = false;
+      syncCombo(p.combo);
       queueWrite(p.id, writeBytes(p, p.value));
     };
-    r.input.onchange = () => confirmParam(p);
+    r.input.onchange = () => confirmParams([p], `${p.section} ${p.label}`);
     box.append(r.row);
-    if (combo && combo.layers.at(-1) === p) syncCombo(combo);
   }
+  combos.forEach(syncCombo);
 }
 
-// Reads a value back after writes, so the log proves whether the module took them.
-async function confirmParam(p) {
+// Reads values back after writes, so the log proves whether the module took them.
+async function confirmParams(list, label) {
   try {
+    const started = performance.now();
     while (pumping || pendingWrites.size) await sleep(30);
-    const actual = await readParam(p);
-    const ok = actual === p.value;
-    p.row.classList.toggle('mismatch', !ok);
+    let checked = 0, differ = 0;
+    for (const p of list) {
+      const actual = await readParam(p);
+      if ((p.touched ?? 0) > started) continue; // moved again since; a later check covers it
+      checked++;
+      const ok = actual === p.value;
+      p.row?.classList.toggle('mismatch', !ok);
+      if (!ok) differ++;
+    }
+    if (!checked) return;
     setResult('padResult',
-      `${p.section} ${p.label}: module reports ${p.format(actual)}${ok ? '' : ` (slider says ${p.format(p.value)})`}`,
-      ok ? 'ok' : 'bad');
+      differ ? `${label}: ${differ} of ${checked} values differ on the module` : `${label}: module confirms ${checked} value${checked > 1 ? 's' : ''}`,
+      differ ? 'bad' : 'ok');
   } catch (e) {
     log(`ERROR ${e.message}`);
     setResult('padResult', e.message, 'bad');
