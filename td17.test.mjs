@@ -129,9 +129,18 @@ test('spread band: subs count only when on and 3 dB or more from their own main'
   assert.equal(spreadBand(0, [head, { kind: 'main', value: 0 }, sub(-40, true, -30)]), null);
 });
 
-test('spread band: extras never count; pan compares zone pans', () => {
-  const head = { kind: 'main', value: 0 };
-  assert.equal(spreadBand(0, [head, { kind: 'extra', value: -400 }]), null);
+test('spread band: extras count at 3 dB or more from the leader', () => {
+  const head = { kind: 'main', value: -50 };
+  const extra = (value) => ({ kind: 'extra', value });
+  assert.equal(spreadBand(-50, [head, extra(-50)]), null);
+  assert.equal(spreadBand(-50, [head, extra(-70)]), null); // 2 dB: ignored
+  assert.equal(spreadBand(-50, [head, extra(-21)]), null);
+  assert.deepEqual(spreadBand(-50, [head, extra(-80)]), { min: -80, max: -50 });
+  assert.deepEqual(spreadBand(-50, [head, extra(-20)]), { min: -50, max: -20 });
+  assert.deepEqual(spreadBand(-50, [head, extra(VOLUME_MIN)]), { min: VOLUME_MIN, max: -50 });
+});
+
+test('spread band: pan compares zone pans', () => {
   const pan = (value) => ({ kind: 'pan', value });
   assert.equal(spreadBand(-5, [pan(-5), pan(-5)]), null);
   assert.deepEqual(spreadBand(-5, [pan(-5), pan(12)]), { min: -5, max: 12 });
