@@ -36,7 +36,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v8</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v9</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -44,6 +44,7 @@
     <div class="row">
       <button class="primary" id="connectBle">Connect via Bluetooth</button>
       <button id="connectUsb">Connect via USB</button>
+      <button id="disconnect" hidden>Disconnect</button>
     </div>
     <div class="row">
       <label><input type="checkbox" id="allDevices"> List all Bluetooth devices</label>
@@ -90,7 +91,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=8'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=9'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -192,6 +193,8 @@ function setConnected(name) {
   $('connStatus').textContent = name ? `Connected: ${name}` : 'Not connected';
   $('connStatus').className = `result ${name ? 'ok' : ''}`;
   for (const id of ['identity', 'readKit', 'readPad']) $(id).disabled = !name;
+  $('disconnect').hidden = !name;
+  $('connectBle').disabled = $('connectUsb').disabled = !!name;
   if (!name) { transport = null; setPadEnabled(false); }
 }
 
@@ -203,11 +206,13 @@ async function connectBle() {
   const device = await navigator.bluetooth.requestDevice(options);
   log(`Bluetooth: selected "${device.name}"`);
   let retries = 0;
+  let closing = false;
   let connectedAt = 0;
   device.addEventListener('gattserverdisconnected', async () => {
     const after = connectedAt ? `${((performance.now() - connectedAt) / 1000).toFixed(1)} s after connecting` : 'during setup';
     log(`Bluetooth: disconnected ${after}`);
     setConnected(null);
+    if (closing) return; // the user pressed Disconnect
     // A first connection often drops once while the phone and module pair; retry a few times.
     if (retries >= 3) { setResult('connStatus', 'Connection keeps dropping. Copy the log.', 'bad'); return; }
     retries++;
@@ -261,11 +266,12 @@ async function connectBle() {
           else await ch.writeValue(data);
         }
       },
+      disconnect() { closing = true; device.gatt.disconnect(); },
     };
     connectedAt = performance.now();
     setConnected(`${device.name || 'Bluetooth device'} (Bluetooth)`);
     // Ask straight away, in case the link only stays up for a moment.
-    run(identity, 'identityResult')();
+    afterConnect();
   }
 
   await openGatt();
@@ -291,8 +297,18 @@ function useUsbPorts() {
   const out = midiAccess.outputs.get($('usbOut').value);
   const input = midiAccess.inputs.get($('usbIn').value);
   input.onmidimessage = (e) => onMidi(Array.from(e.data));
-  transport = { async send(bytes) { out.send(bytes); } };
+  transport = {
+    async send(bytes) { out.send(bytes); },
+    disconnect() { input.onmidimessage = null; $('usbPorts').hidden = true; setConnected(null); },
+  };
   setConnected(`${out.name} (USB)`);
+  afterConnect();
+}
+
+// Runs once a link is up: prove SysEx works, then load the selected group.
+async function afterConnect() {
+  await run(identity, 'identityResult')();
+  if (transport) await run(readGroup, 'padResult')();
 }
 
 // ---------- steps ----------
@@ -328,15 +344,32 @@ const panParam = (id, section, label, addr) =>
 const readParam = async (p) => td.decodeNibbles(await request(p.addr, p.size));
 const writeBytes = (p, value) => td.dt1(deviceId(), p.addr, td.encodeNibbles(value, p.size));
 
+let readSeq = 0; // lets a newer read (group changed, reconnect) supersede one in flight
+class Superseded extends Error {}
+
 async function readGroup() {
+  const seq = ++readSeq;
+  const current = async (promise) => {
+    const value = await promise;
+    if (seq !== readSeq) throw new Superseded();
+    return value;
+  };
+  try {
+    await readGroupInner(current);
+  } catch (e) {
+    if (!(e instanceof Superseded)) throw e;
+  }
+}
+
+async function readGroupInner(current) {
   setPadEnabled(false);
   setResult('padResult', 'Reading…');
-  await readKit();
+  await current(readKit());
   const group = td.GROUPS[+$('group').value];
   const list = [];
   for (const u of group.units) {
     const name = td.UNITS[u];
-    const subOn = (await request(td.address.subSwitch(kit, u), 1))[0] === 1;
+    const subOn = (await current(request(td.address.subSwitch(kit, u), 1)))[0] === 1;
     list.push(
       volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main')),
       volumeParam(`${u}s`, name, subOn ? 'Sub' : 'Sub (off)', td.address.volume(kit, u, 'sub')),
@@ -346,7 +379,7 @@ async function readGroup() {
   for (const x of group.extras ?? []) {
     list.push(volumeParam(x, `${td.EXTRA_LABELS[x]} (kit-wide)`, 'Volume', td.address[x](kit)));
   }
-  for (const p of list) p.original = p.value = await readParam(p);
+  for (const p of list) p.original = p.value = await current(readParam(p));
   params = list;
   loadedKit = kit;
   renderSliders();
@@ -460,7 +493,9 @@ function connectSim() {
       td.parseDt1(bytes).data.forEach((b, i) => memory.set(key(addr, i), b));
     },
   };
+  transport.disconnect = () => setConnected(null);
   setConnected('Simulated TD-17');
+  afterConnect();
 }
 
 // ---------- wiring ----------
@@ -482,7 +517,12 @@ $('usbOut').onchange = $('usbIn').onchange = run(useUsbPorts, 'connStatus');
 $('identity').onclick = run(identity, 'identityResult');
 $('readKit').onclick = run(readKit, 'kitResult');
 $('readPad').onclick = run(readGroup, 'padResult');
-$('group').onchange = () => { setPadEnabled(false); setResult('padResult', ''); };
+$('group').onchange = () => {
+  setPadEnabled(false);
+  setResult('padResult', '');
+  if (transport) run(readGroup, 'padResult')();
+};
+$('disconnect').onclick = () => { log('Disconnect requested'); transport?.disconnect(); };
 $('restorePad').onclick = run(restoreGroup, 'padResult');
 $('latency').onclick = run(latencyTest, 'padResult');
 $('clearLog').onclick = () => { $('log').textContent = ''; };
