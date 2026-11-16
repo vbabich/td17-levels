@@ -80,9 +80,29 @@ function kitBase(kit) {
   return [0x03 + (v >> 7), v & 0x7f];
 }
 
+// Pad groups as the player thinks of them: unit indexes plus related kit-wide volumes.
+export const GROUPS = [
+  { name: 'Kick', units: [0] },
+  { name: 'Snare', units: [1, 2], extras: ['xstickVolume'] },
+  { name: 'Tom 1', units: [3, 4] },
+  { name: 'Tom 2', units: [5, 6] },
+  { name: 'Tom 3', units: [7, 8] },
+  { name: 'Hi-Hat', units: [9, 10], extras: ['pedalHhVolume'] },
+  { name: 'Crash 1', units: [11, 12] },
+  { name: 'Crash 2', units: [13, 14] },
+  { name: 'Ride', units: [15, 16, 17] },
+  { name: 'Aux', units: [18, 19] },
+];
+
+export const EXTRA_LABELS = { xstickVolume: 'XStick volume', pedalHhVolume: 'Pedal HH volume' };
+
 export const address = {
   currentKit: () => [0x00, 0x00, 0x00, 0x00],
+  kitVolume: (kit) => [...kitBase(kit), 0x00, 0x1f],
+  pedalHhVolume: (kit) => [...kitBase(kit), 0x00, 0x23],
+  xstickVolume: (kit) => [...kitBase(kit), 0x00, 0x27],
   pan: (kit, unit) => [...kitBase(kit), 0x20 + unit, 0x00],
+  subSwitch: (kit, unit) => [...kitBase(kit), 0x20 + unit, 0x02],
   volume: (kit, unit, layer = 'main') => [...kitBase(kit), (layer === 'sub' ? 0x60 : 0x40) + unit, 0x04],
 };
 

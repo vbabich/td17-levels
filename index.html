@@ -25,13 +25,18 @@
   .result { font-weight:600; min-height:1.4em; }
   .ok { color:var(--ok); } .bad { color:var(--bad); }
   .value { font-variant-numeric:tabular-nums; font-weight:600; min-width:5.5em; text-align:right; }
+  #sliders { display:grid; gap:6px; }
+  #sliders h3 { font-size:14px; margin:8px 0 0; }
+  .slider { display:grid; grid-template-columns:5em 1fr 5.5em; gap:8px; align-items:center; font-size:14px; }
+  .slider .name { color:var(--muted); }
+  .slider.mismatch .value { color:var(--bad); }
   label { font-size:14px; color:var(--muted); display:flex; gap:6px; align-items:center; }
   #log { font:12px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-all; max-height:260px; overflow:auto; margin:0; }
 </style>
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v6</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v7</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -64,32 +69,28 @@
   </section>
 
   <section>
-    <h2>4. Read and write one pad</h2>
-    <p>Writes change the stored kit. Read first; "Restore" puts the original values back.</p>
+    <h2>4. Pad group levels</h2>
+    <p>Writes change the stored kit. "Restore" puts back the values as they were when the group was read.</p>
     <div class="row">
-      <select id="unit" aria-label="Pad"></select>
-      <select id="layer" aria-label="Layer"><option value="main">Main layer</option><option value="sub">Sub layer</option></select>
-    </div>
-    <div class="row">
-      <button id="readPad" disabled>Read volume and pan</button>
+      <select id="group" aria-label="Pad group"></select>
+      <button id="readPad" disabled>Read</button>
       <button id="restorePad" disabled>Restore</button>
       <button id="latency" disabled>Latency test</button>
     </div>
-    <div class="row"><input type="range" id="volume" min="-601" max="60" value="0" disabled aria-label="Volume"><span class="value" id="volumeValue">–</span></div>
-    <div class="row"><input type="range" id="pan" min="-30" max="30" value="0" disabled aria-label="Pan"><span class="value" id="panValue">–</span></div>
+    <div id="sliders"></div>
     <div class="result" id="padResult"></div>
   </section>
 
   <section>
     <h2>Log</h2>
     <div class="row"><button id="copyLog">Copy log</button><button id="clearLog">Clear</button>
-      <label><input type="checkbox" id="rawPackets"> Raw Bluetooth packets</label></div>
+      <label><input type="checkbox" id="rawPackets"> Verbose (notes, raw packets)</label></div>
     <pre id="log"></pre>
   </section>
 </main>
 
 <script type="module">
-import * as td from './td17.js';
+import * as td from './td17.js?v=7'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -97,7 +98,8 @@ const MIN_GAP_MS = 20; // Roland: leave at least 20 ms between DT1 messages
 
 let transport = null; // { name, send(bytes) }
 let kit = null;       // 0-99 once read
-let original = null;  // { key, volume, pan } as read from the module
+let params = [];      // sliders currently shown: { id, section, label, addr, size, value, original, ... }
+let loadedKit = null; // kit the sliders were read from
 const waiters = [];   // pending replies: { match(msg), resolve }
 
 // ---------- log ----------
@@ -157,7 +159,11 @@ function waitFor(match, timeoutMs = 2000) {
 
 function onMidi(msg) {
   if (msg[0] >= 0xf8) return; // clock / active sensing
-  log(`RX ${td.hex(msg)}`);
+  const isProgramChange = (msg[0] & 0xf0) === 0xc0;
+  if (msg[0] === 0xf0 || isProgramChange || $('rawPackets').checked) log(`RX ${td.hex(msg)}`);
+  if (isProgramChange && params.length) {
+    setResult('padResult', `Kit changed on the module; these sliders still edit kit ${loadedKit + 1}. Read again.`, 'bad');
+  }
   for (let i = waiters.length - 1; i >= 0; i--) {
     const r = waiters[i].match(msg);
     if (r) { waiters[i].resolve(r); waiters.splice(i, 1); }
@@ -310,47 +316,81 @@ async function readKit() {
   return kit;
 }
 
-function padKey() { return `${kit}/${$('unit').value}/${$('layer').value}`; }
 function setPadEnabled(on) {
-  for (const id of ['volume', 'pan']) $(id).disabled = !on;
   $('restorePad').disabled = $('latency').disabled = !on;
-}
-function showPad(volume, pan) {
-  $('volume').value = volume; $('volumeValue').textContent = td.formatVolume(volume);
-  $('pan').value = pan; $('panValue').textContent = td.formatPan(pan);
+  if (!on) { params = []; $('sliders').replaceChildren(); }
 }
 
-async function readPad() {
-  setResult('padResult', 'Waiting…');
+const volumeParam = (id, section, label, addr) =>
+  ({ id, section, label, addr, size: 4, min: td.VOLUME_MIN, max: td.VOLUME_MAX, format: td.formatVolume });
+const panParam = (id, section, label, addr) =>
+  ({ id, section, label, addr, size: 2, min: td.PAN_MIN, max: td.PAN_MAX, format: td.formatPan });
+const readParam = async (p) => td.decodeNibbles(await request(p.addr, p.size));
+const writeBytes = (p, value) => td.dt1(deviceId(), p.addr, td.encodeNibbles(value, p.size));
+
+async function readGroup() {
+  setPadEnabled(false);
+  setResult('padResult', 'Reading…');
   await readKit();
-  const unit = +$('unit').value, layer = $('layer').value;
-  const volume = td.decodeNibbles(await request(td.address.volume(kit, unit, layer), 4));
-  const pan = td.decodeNibbles(await request(td.address.pan(kit, unit), 2));
-  original = { key: padKey(), kit, unit, layer, volume, pan };
-  showPad(volume, pan);
+  const group = td.GROUPS[+$('group').value];
+  const list = [];
+  for (const u of group.units) {
+    const name = td.UNITS[u];
+    const subOn = (await request(td.address.subSwitch(kit, u), 1))[0] === 1;
+    list.push(
+      volumeParam(`${u}m`, name, 'Main', td.address.volume(kit, u, 'main')),
+      volumeParam(`${u}s`, name, subOn ? 'Sub' : 'Sub (off)', td.address.volume(kit, u, 'sub')),
+      panParam(`${u}p`, name, 'Pan', td.address.pan(kit, u)),
+    );
+  }
+  for (const x of group.extras ?? []) {
+    list.push(volumeParam(x, `${td.EXTRA_LABELS[x]} (kit-wide)`, 'Volume', td.address[x](kit)));
+  }
+  for (const p of list) p.original = p.value = await readParam(p);
+  params = list;
+  loadedKit = kit;
+  renderSliders();
   setPadEnabled(true);
-  setResult('padResult', `Kit ${kit + 1}, ${td.UNITS[unit]}: ${td.formatVolume(volume)}, pan ${td.formatPan(pan)}`, 'ok');
+  setResult('padResult', `Kit ${kit + 1}, ${group.name}: read ${list.length} values`, 'ok');
 }
 
-function writeVolume(value) {
-  const { kit, unit, layer } = original;
-  queueWrite('volume', td.dt1(deviceId(), td.address.volume(kit, unit, layer), td.encodeNibbles(value, 4)));
-}
-function writePan(value) {
-  const { kit, unit } = original;
-  queueWrite('pan', td.dt1(deviceId(), td.address.pan(kit, unit), td.encodeNibbles(value, 2)));
+function renderSliders() {
+  const box = $('sliders');
+  box.replaceChildren();
+  let section = null;
+  for (const p of params) {
+    if (p.section !== section) {
+      section = p.section;
+      box.append(Object.assign(document.createElement('h3'), { textContent: section }));
+    }
+    const row = Object.assign(document.createElement('div'), { className: 'slider' });
+    const name = Object.assign(document.createElement('span'), { className: 'name', textContent: p.label });
+    const input = Object.assign(document.createElement('input'), { type: 'range', min: p.min, max: p.max });
+    input.value = p.value;
+    input.setAttribute('aria-label', `${p.section} ${p.label}`);
+    const out = Object.assign(document.createElement('span'), { className: 'value', textContent: p.format(p.value) });
+    input.oninput = () => {
+      p.value = +input.value;
+      out.textContent = p.format(p.value);
+      row.classList.remove('mismatch');
+      queueWrite(p.id, writeBytes(p, p.value));
+    };
+    input.onchange = () => confirmParam(p);
+    p.row = row;
+    row.append(name, input, out);
+    box.append(row);
+  }
 }
 
-// Reads the pad back after writes, so the log proves whether the module took them.
-async function confirmPad() {
+// Reads a value back after writes, so the log proves whether the module took them.
+async function confirmParam(p) {
   try {
     while (pumping || pendingWrites.size) await sleep(30);
-    const { kit, unit, layer } = original;
-    const volume = td.decodeNibbles(await request(td.address.volume(kit, unit, layer), 4));
-    const pan = td.decodeNibbles(await request(td.address.pan(kit, unit), 2));
-    const ok = volume === +$('volume').value && pan === +$('pan').value;
+    const actual = await readParam(p);
+    const ok = actual === p.value;
+    p.row.classList.toggle('mismatch', !ok);
     setResult('padResult',
-      `Module now reports ${td.formatVolume(volume)}, pan ${td.formatPan(pan)}${ok ? '' : ' (does not match the sliders)'}`,
+      `${p.section} ${p.label}: module reports ${p.format(actual)}${ok ? '' : ` (slider says ${p.format(p.value)})`}`,
       ok ? 'ok' : 'bad');
   } catch (e) {
     log(`ERROR ${e.message}`);
@@ -358,41 +398,74 @@ async function confirmPad() {
   }
 }
 
+async function restoreGroup() {
+  const changed = params.filter((p) => p.value !== p.original);
+  for (const p of changed) {
+    p.value = p.original;
+    await send(writeBytes(p, p.original));
+  }
+  renderSliders();
+  let failed = 0;
+  for (const p of changed) if ((await readParam(p)) !== p.original) failed++;
+  setResult('padResult',
+    failed ? `${failed} of ${changed.length} values did not restore` : `Restored ${changed.length} values`,
+    failed ? 'bad' : 'ok');
+}
+
 // Measures where delay comes from: sends bursts of volume writes at different
 // spacings, then times how long the module takes to answer a read queued behind them.
 async function latencyTest() {
-  const { kit, unit, layer, volume } = original;
-  const addr = td.address.volume(kit, unit, layer);
-  const write = (v) => send(td.dt1(deviceId(), addr, td.encodeNibbles(v, 4)));
+  const p = params.find((x) => x.size === 4);
+  const base = Math.max(p.value, td.VOLUME_MIN + 2);
+  const write = (v) => send(writeBytes(p, v));
   const ms = (t) => `${Math.round(performance.now() - t)} ms`;
   const lines = [];
   setResult('padResult', 'Running latency test (about 10 s)…');
   try {
     let t = performance.now();
-    await request(addr, 4);
+    await readParam(p);
     lines.push(`Single read round trip: ${ms(t)}`);
     for (const gap of [20, 40, 80, 160]) {
       t = performance.now();
       for (let i = 0; i < 20; i++) {
-        await write(volume - 1 - (i % 2)); // 0.1 dB wobble, inaudible
+        await write(base - 1 - (i % 2)); // 0.1 dB wobble, inaudible
         if (gap > MIN_GAP_MS) await sleep(gap - MIN_GAP_MS);
       }
       const sendTime = ms(t);
       t = performance.now();
-      await request(addr, 4);
+      await readParam(p);
       lines.push(`20 writes at ${gap} ms spacing: sent in ${sendTime}, read behind them answered after ${ms(t)}`);
       await sleep(500);
     }
   } finally {
-    await write(volume);
+    await write(p.value);
     for (const l of lines) log(`LATENCY ${l}`);
   }
   setResult('padResult', 'Latency test done. Copy the log.', 'ok');
 }
 
+// A fake module for development: open the page with ?sim to get this button.
+function connectSim() {
+  const memory = new Map();
+  const key = (a, i) => ((a[0] << 21) | (a[1] << 14) | (a[2] << 7) | a[3]) + i;
+  const reply = (msg) => setTimeout(() => onMidi(msg), 15);
+  transport = {
+    async send(bytes) {
+      if (bytes[1] === 0x7e) return reply([0xf0, 0x7e, 0x10, 0x06, 0x02, 0x41, 0x4b, 0x03, 0, 0, 0, 0, 0, 2, 0xf7]);
+      const addr = bytes.slice(8, 12);
+      if (bytes[7] === 0x11) {
+        const data = Array.from({ length: bytes[15] }, (_, i) => memory.get(key(addr, i)) ?? 0);
+        return reply(td.dt1(0x10, addr, data));
+      }
+      td.parseDt1(bytes).data.forEach((b, i) => memory.set(key(addr, i), b));
+    },
+  };
+  setConnected('Simulated TD-17');
+}
+
 // ---------- wiring ----------
-$('unit').replaceChildren(...td.UNITS.map((name, i) => new Option(name, i)));
-$('unit').value = 1;
+$('group').replaceChildren(...td.GROUPS.map((g, i) => new Option(g.name, i)));
+$('group').value = 1;
 
 function run(fn, resultId) {
   return async () => {
@@ -408,15 +481,16 @@ $('connectUsb').onclick = run(connectUsb, 'connStatus');
 $('usbOut').onchange = $('usbIn').onchange = run(useUsbPorts, 'connStatus');
 $('identity').onclick = run(identity, 'identityResult');
 $('readKit').onclick = run(readKit, 'kitResult');
-$('readPad').onclick = run(readPad, 'padResult');
-$('unit').onchange = $('layer').onchange = () => { setPadEnabled(false); setResult('padResult', ''); };
-$('volume').oninput = (e) => { $('volumeValue').textContent = td.formatVolume(+e.target.value); writeVolume(+e.target.value); };
-$('pan').oninput = (e) => { $('panValue').textContent = td.formatPan(+e.target.value); writePan(+e.target.value); };
-$('volume').onchange = $('pan').onchange = confirmPad;
+$('readPad').onclick = run(readGroup, 'padResult');
+$('group').onchange = () => { setPadEnabled(false); setResult('padResult', ''); };
+$('restorePad').onclick = run(restoreGroup, 'padResult');
 $('latency').onclick = run(latencyTest, 'padResult');
-$('restorePad').onclick = () => { showPad(original.volume, original.pan); writeVolume(original.volume); writePan(original.pan); confirmPad(); };
 $('clearLog').onclick = () => { $('log').textContent = ''; };
 $('copyLog').onclick = () => navigator.clipboard.writeText($('log').textContent);
+if (new URLSearchParams(location.search).has('sim')) {
+  const b = Object.assign(document.createElement('button'), { textContent: 'Connect to simulator', onclick: connectSim });
+  $('connectUsb').after(b);
+}
 
 if (!window.isSecureContext) log('This page is not in a secure context (needs https or localhost); Bluetooth and MIDI will be unavailable.');
 </script>
