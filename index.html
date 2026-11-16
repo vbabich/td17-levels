@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v5</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v6</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -73,6 +73,7 @@
     <div class="row">
       <button id="readPad" disabled>Read volume and pan</button>
       <button id="restorePad" disabled>Restore</button>
+      <button id="latency" disabled>Latency test</button>
     </div>
     <div class="row"><input type="range" id="volume" min="-601" max="60" value="0" disabled aria-label="Volume"><span class="value" id="volumeValue">–</span></div>
     <div class="row"><input type="range" id="pan" min="-30" max="30" value="0" disabled aria-label="Pan"><span class="value" id="panValue">–</span></div>
@@ -101,7 +102,8 @@ const waiters = [];   // pending replies: { match(msg), resolve }
 
 // ---------- log ----------
 function log(line) {
-  const t = new Date().toLocaleTimeString([], { hour12: false });
+  const d = new Date();
+  const t = `${d.toLocaleTimeString([], { hour12: false })}.${String(d.getMilliseconds()).padStart(3, '0')}`;
   $('log').textContent += `${t} ${line}\n`;
   $('log').scrollTop = $('log').scrollHeight;
 }
@@ -311,7 +313,7 @@ async function readKit() {
 function padKey() { return `${kit}/${$('unit').value}/${$('layer').value}`; }
 function setPadEnabled(on) {
   for (const id of ['volume', 'pan']) $(id).disabled = !on;
-  $('restorePad').disabled = !on;
+  $('restorePad').disabled = $('latency').disabled = !on;
 }
 function showPad(volume, pan) {
   $('volume').value = volume; $('volumeValue').textContent = td.formatVolume(volume);
@@ -356,6 +358,38 @@ async function confirmPad() {
   }
 }
 
+// Measures where delay comes from: sends bursts of volume writes at different
+// spacings, then times how long the module takes to answer a read queued behind them.
+async function latencyTest() {
+  const { kit, unit, layer, volume } = original;
+  const addr = td.address.volume(kit, unit, layer);
+  const write = (v) => send(td.dt1(deviceId(), addr, td.encodeNibbles(v, 4)));
+  const ms = (t) => `${Math.round(performance.now() - t)} ms`;
+  const lines = [];
+  setResult('padResult', 'Running latency test (about 10 s)…');
+  try {
+    let t = performance.now();
+    await request(addr, 4);
+    lines.push(`Single read round trip: ${ms(t)}`);
+    for (const gap of [20, 40, 80, 160]) {
+      t = performance.now();
+      for (let i = 0; i < 20; i++) {
+        await write(volume - 1 - (i % 2)); // 0.1 dB wobble, inaudible
+        if (gap > MIN_GAP_MS) await sleep(gap - MIN_GAP_MS);
+      }
+      const sendTime = ms(t);
+      t = performance.now();
+      await request(addr, 4);
+      lines.push(`20 writes at ${gap} ms spacing: sent in ${sendTime}, read behind them answered after ${ms(t)}`);
+      await sleep(500);
+    }
+  } finally {
+    await write(volume);
+    for (const l of lines) log(`LATENCY ${l}`);
+  }
+  setResult('padResult', 'Latency test done. Copy the log.', 'ok');
+}
+
 // ---------- wiring ----------
 $('unit').replaceChildren(...td.UNITS.map((name, i) => new Option(name, i)));
 $('unit').value = 1;
@@ -379,6 +413,7 @@ $('unit').onchange = $('layer').onchange = () => { setPadEnabled(false); setResu
 $('volume').oninput = (e) => { $('volumeValue').textContent = td.formatVolume(+e.target.value); writeVolume(+e.target.value); };
 $('pan').oninput = (e) => { $('panValue').textContent = td.formatPan(+e.target.value); writePan(+e.target.value); };
 $('volume').onchange = $('pan').onchange = confirmPad;
+$('latency').onclick = run(latencyTest, 'padResult');
 $('restorePad').onclick = () => { showPad(original.volume, original.pan); writeVolume(original.volume); writePan(original.pan); confirmPad(); };
 $('clearLog').onclick = () => { $('log').textContent = ''; };
 $('copyLog').onclick = () => navigator.clipboard.writeText($('log').textContent);
