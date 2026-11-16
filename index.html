@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TD-17 link tester</title>
 <style>
-  :root { color-scheme: light dark; --bg:#f5f5f3; --card:#fff; --text:#1c1c1a; --muted:#6b6b66; --line:#d9d9d4; --accent:#d2491f; --ok:#1d7a3e; --bad:#b3261e; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --card:#222220; --text:#ecece8; --muted:#9a9a94; --line:#3a3a37; --accent:#ff7a4d; --ok:#5fcf85; --bad:#ff8a80; } }
+  :root { color-scheme: light dark; --bg:#f5f5f3; --card:#fff; --text:#1c1c1a; --muted:#6b6b66; --line:#d9d9d4; --accent:#d2491f; --ok:#1d7a3e; --bad:#b3261e; --level:#3d9fe6; --pan:#3fb573; --track:#dcdcd6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --card:#222220; --text:#ecece8; --muted:#9a9a94; --line:#3a3a37; --accent:#ff7a4d; --ok:#5fcf85; --bad:#ff8a80; --level:#6cc0f7; --pan:#7ddba0; --track:#44443f; } }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:16px/1.4 system-ui, sans-serif; }
@@ -31,6 +31,20 @@
   .slider .name { color:var(--muted); }
   .slider.mismatch .value { color:var(--bad); }
   #sliders:not(.separate) .detail { display:none; }
+  /* Custom-drawn range inputs: --frac (0..1) is set from script; the fill runs
+     from the left edge for levels and from the centre for pan. */
+  .slider input[type=range] {
+    -webkit-appearance:none; appearance:none; background:transparent; height:28px; margin:0;
+    --pos: calc(10px + (100% - 20px) * var(--frac, 0));
+    --from: 0%; --to: var(--pos); --fill: var(--level);
+    --paint: linear-gradient(to right, var(--track) 0 var(--from), var(--fill) var(--from) var(--to), var(--track) var(--to) 100%);
+  }
+  .slider.pan input[type=range] { --from: min(50%, var(--pos)); --to: max(50%, var(--pos)); --fill: var(--pan); }
+  .slider input[type=range]::-webkit-slider-runnable-track { height:6px; border-radius:3px; background:var(--paint); }
+  .slider input[type=range]::-moz-range-track { height:6px; border-radius:3px; background:var(--paint); }
+  .slider input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; margin-top:-7px; border-radius:50%; background:var(--fill); border:2px solid var(--card); box-shadow:0 0 0 1px var(--line); }
+  .slider input[type=range]::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:var(--fill); border:2px solid var(--card); box-shadow:0 0 0 1px var(--line); }
+  .slider input[type=range]:focus-visible { outline:2px solid var(--fill); outline-offset:2px; border-radius:6px; }
   .slider.detail .name { padding-left:.8em; }
   label { font-size:14px; color:var(--muted); display:flex; gap:6px; align-items:center; }
   #log { font:12px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-all; max-height:260px; overflow:auto; margin:0; }
@@ -38,7 +52,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v11</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v12</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -94,7 +108,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=11'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=12'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -407,11 +421,19 @@ async function readGroupInner(current) {
   setResult('padResult', `Kit ${kit + 1}, ${group.name}: read ${list.length} values`, 'ok');
 }
 
+// Tells the CSS how far along its track a slider is, so the coloured fill can be drawn.
+function paint(input) {
+  input.style.setProperty('--frac', (input.value - input.min) / (input.max - input.min));
+}
+
 function makeRow(section, label, min, max, value, format, detail = false) {
-  const row = Object.assign(document.createElement('div'), { className: detail ? 'slider detail' : 'slider' });
+  const kind = format === td.formatPan ? 'pan' : 'level';
+  const row = Object.assign(document.createElement('div'), { className: `slider ${kind}${detail ? ' detail' : ''}` });
   const name = Object.assign(document.createElement('span'), { className: 'name', textContent: label });
   const input = Object.assign(document.createElement('input'), { type: 'range', min, max });
   input.value = value;
+  input.addEventListener('input', () => paint(input));
+  paint(input);
   input.setAttribute('aria-label', `${section} ${label}`);
   const out = Object.assign(document.createElement('span'), { className: 'value', textContent: format(value) });
   row.append(name, input, out);
@@ -421,6 +443,7 @@ function makeRow(section, label, min, max, value, format, detail = false) {
 function setParamValue(p, value) {
   p.value = value;
   p.input.value = value;
+  paint(p.input);
   p.out.textContent = p.format(value);
   p.row.classList.remove('mismatch');
 }
@@ -431,6 +454,7 @@ function syncCombo(combo) {
   combo.blend = td.captureBlend(values);
   const level = values[combo.blend.leader];
   combo.input.value = level;
+  paint(combo.input);
   combo.out.textContent = td.formatVolume(level);
 }
 
