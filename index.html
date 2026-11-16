@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester</h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v2</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -81,7 +81,8 @@
 
   <section>
     <h2>Log</h2>
-    <div class="row"><button id="copyLog">Copy log</button><button id="clearLog">Clear</button></div>
+    <div class="row"><button id="copyLog">Copy log</button><button id="clearLog">Clear</button>
+      <label><input type="checkbox" id="rawPackets" checked> Raw Bluetooth packets</label></div>
     <pre id="log"></pre>
   </section>
 </main>
@@ -193,28 +194,59 @@ async function connectBle() {
     : { filters: [{ services: [td.BLE_MIDI_SERVICE] }, { namePrefix: 'TD-17' }], optionalServices: [td.BLE_MIDI_SERVICE] };
   const device = await navigator.bluetooth.requestDevice(options);
   log(`Bluetooth: selected "${device.name}"`);
-  device.addEventListener('gattserverdisconnected', () => { log('Bluetooth: disconnected'); setConnected(null); });
-  const server = await device.gatt.connect();
-  const service = await server.getPrimaryService(td.BLE_MIDI_SERVICE);
-  const ch = await service.getCharacteristic(td.BLE_MIDI_CHARACTERISTIC);
-  const parser = new td.BleMidiParser();
-  ch.addEventListener('characteristicvaluechanged', (e) => {
-    const v = e.target.value;
-    const packet = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
-    for (const msg of parser.push(packet)) onMidi(msg);
+  let retries = 0;
+  let connectedAt = 0;
+  device.addEventListener('gattserverdisconnected', async () => {
+    const after = connectedAt ? `${((performance.now() - connectedAt) / 1000).toFixed(1)} s after connecting` : 'during setup';
+    log(`Bluetooth: disconnected ${after}`);
+    setConnected(null);
+    // A first connection often drops once while the phone and module pair; retry a few times.
+    if (retries >= 3) { setResult('connStatus', 'Connection keeps dropping. Copy the log.', 'bad'); return; }
+    retries++;
+    setResult('connStatus', `Dropped, reconnecting (attempt ${retries} of 3)…`);
+    await sleep(700);
+    try { await openGatt(); }
+    catch (e) { log(`ERROR reconnect: ${e.message}`); setResult('connStatus', e.message, 'bad'); }
   });
-  await ch.startNotifications();
-  try { await ch.readValue(); } catch { /* optional initial read; some devices refuse it */ }
-  transport = {
-    async send(bytes) {
-      for (const packet of td.bleEncodeSysex(bytes, performance.now())) {
-        const data = Uint8Array.from(packet);
-        if (ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(data);
-        else await ch.writeValue(data);
-      }
-    },
-  };
-  setConnected(`${device.name || 'Bluetooth device'} (Bluetooth)`);
+
+  async function openGatt() {
+    connectedAt = 0;
+    log('Bluetooth: connecting GATT…');
+    const server = await device.gatt.connect();
+    log('Bluetooth: GATT connected, finding MIDI service…');
+    const service = await server.getPrimaryService(td.BLE_MIDI_SERVICE);
+    const ch = await service.getCharacteristic(td.BLE_MIDI_CHARACTERISTIC);
+    const p = ch.properties;
+    log(`Bluetooth: MIDI characteristic found (read=${p.read} write=${p.write} writeNoResp=${p.writeWithoutResponse} notify=${p.notify})`);
+    const parser = new td.BleMidiParser();
+    ch.addEventListener('characteristicvaluechanged', (e) => {
+      const v = e.target.value;
+      const packet = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+      if ($('rawPackets').checked) log(`BLE ${td.hex(packet)}`);
+      for (const msg of parser.push(packet)) onMidi(msg);
+    });
+    await ch.startNotifications();
+    log('Bluetooth: notifications on');
+    try {
+      const v = await ch.readValue();
+      log(`Bluetooth: initial read ok (${v.byteLength} bytes)`);
+    } catch (e) {
+      log(`Bluetooth: initial read failed: ${e.message}`);
+    }
+    transport = {
+      async send(bytes) {
+        for (const packet of td.bleEncodeSysex(bytes, performance.now())) {
+          const data = Uint8Array.from(packet);
+          if (p.writeWithoutResponse && ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(data);
+          else await ch.writeValue(data);
+        }
+      },
+    };
+    connectedAt = performance.now();
+    setConnected(`${device.name || 'Bluetooth device'} (Bluetooth)`);
+  }
+
+  await openGatt();
 }
 
 let midiAccess = null;
