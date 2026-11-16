@@ -36,7 +36,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v9</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v10</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -72,8 +72,8 @@
   <section>
     <h2>4. Pad group levels</h2>
     <p>Writes change the stored kit. "Restore" puts back the values as they were when the group was read.</p>
+    <div class="row"><select id="group" aria-label="Pad group"></select></div>
     <div class="row">
-      <select id="group" aria-label="Pad group"></select>
       <button id="readPad" disabled>Read</button>
       <button id="restorePad" disabled>Restore</button>
       <button id="latency" disabled>Latency test</button>
@@ -91,7 +91,7 @@
 </main>
 
 <script type="module">
-import * as td from './td17.js?v=9'; // bump with the page version so phones never pair a new page with a cached module
+import * as td from './td17.js?v=10'; // bump with the page version so phones never pair a new page with a cached module
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -162,12 +162,32 @@ function onMidi(msg) {
   if (msg[0] >= 0xf8) return; // clock / active sensing
   const isProgramChange = (msg[0] & 0xf0) === 0xc0;
   if (msg[0] === 0xf0 || isProgramChange || $('rawPackets').checked) log(`RX ${td.hex(msg)}`);
-  if (isProgramChange && params.length) {
-    setResult('padResult', `Kit changed on the module; these sliders still edit kit ${loadedKit + 1}. Read again.`, 'bad');
-  }
+  let solicited = false;
   for (let i = waiters.length - 1; i >= 0; i--) {
     const r = waiters[i].match(msg);
-    if (r) { waiters[i].resolve(r); waiters.splice(i, 1); }
+    if (r) { waiters[i].resolve(r); waiters.splice(i, 1); solicited = true; }
+  }
+  // Kit switched on the module: reload the group from the new kit.
+  if (isProgramChange && transport) run(readGroup, 'padResult')();
+  if (msg[0] === 0xf0 && !solicited) applyModuleEdit(msg);
+}
+
+// With "Transmit Edit Data" on, the module sends a DT1 whenever a value is
+// edited on its own panel. Mirror those onto the matching sliders.
+function applyModuleEdit(msg) {
+  const d = td.parseDt1(msg);
+  if (!d || !d.checksumOk) return;
+  if (d.address.every((b) => b === 0)) { run(readGroup, 'padResult')(); return; } // current kit number
+  for (const p of params) {
+    const offset = p.addr[3] - d.address[3];
+    const sameBlock = p.addr.slice(0, 3).every((b, i) => b === d.address[i]);
+    if (!sameBlock || offset < 0 || offset + p.size > d.data.length) continue;
+    if (performance.now() - (p.touched ?? 0) < 500) continue; // don't fight a slider being dragged
+    p.value = td.decodeNibbles(d.data.slice(offset, offset + p.size));
+    p.input.value = p.value;
+    p.out.textContent = p.format(p.value);
+    p.row.classList.remove('mismatch');
+    setResult('padResult', `${p.section} ${p.label} changed on the module: ${p.format(p.value)}`, 'ok');
   }
 }
 
@@ -404,12 +424,13 @@ function renderSliders() {
     const out = Object.assign(document.createElement('span'), { className: 'value', textContent: p.format(p.value) });
     input.oninput = () => {
       p.value = +input.value;
+      p.touched = performance.now();
       out.textContent = p.format(p.value);
       row.classList.remove('mismatch');
       queueWrite(p.id, writeBytes(p, p.value));
     };
     input.onchange = () => confirmParam(p);
-    p.row = row;
+    Object.assign(p, { row, input, out });
     row.append(name, input, out);
     box.append(row);
   }
@@ -494,6 +515,7 @@ function connectSim() {
     },
   };
   transport.disconnect = () => setConnected(null);
+  window.simModuleEdit = (addr, data) => reply(td.dt1(0x10, addr, data)); // pretend a value was edited on the module
   setConnected('Simulated TD-17');
   afterConnect();
 }
