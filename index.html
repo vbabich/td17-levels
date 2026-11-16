@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v4</small></h1>
+  <h1>TD-17 link tester <small style="font-weight:400;color:var(--muted)">v5</small></h1>
 
   <section>
     <h2>1. Connect</h2>
@@ -82,7 +82,7 @@
   <section>
     <h2>Log</h2>
     <div class="row"><button id="copyLog">Copy log</button><button id="clearLog">Clear</button>
-      <label><input type="checkbox" id="rawPackets" checked> Raw Bluetooth packets</label></div>
+      <label><input type="checkbox" id="rawPackets"> Raw Bluetooth packets</label></div>
     <pre id="log"></pre>
   </section>
 </main>
@@ -339,6 +339,23 @@ function writePan(value) {
   queueWrite('pan', td.dt1(deviceId(), td.address.pan(kit, unit), td.encodeNibbles(value, 2)));
 }
 
+// Reads the pad back after writes, so the log proves whether the module took them.
+async function confirmPad() {
+  try {
+    while (pumping || pendingWrites.size) await sleep(30);
+    const { kit, unit, layer } = original;
+    const volume = td.decodeNibbles(await request(td.address.volume(kit, unit, layer), 4));
+    const pan = td.decodeNibbles(await request(td.address.pan(kit, unit), 2));
+    const ok = volume === +$('volume').value && pan === +$('pan').value;
+    setResult('padResult',
+      `Module now reports ${td.formatVolume(volume)}, pan ${td.formatPan(pan)}${ok ? '' : ' (does not match the sliders)'}`,
+      ok ? 'ok' : 'bad');
+  } catch (e) {
+    log(`ERROR ${e.message}`);
+    setResult('padResult', e.message, 'bad');
+  }
+}
+
 // ---------- wiring ----------
 $('unit').replaceChildren(...td.UNITS.map((name, i) => new Option(name, i)));
 $('unit').value = 1;
@@ -361,7 +378,8 @@ $('readPad').onclick = run(readPad, 'padResult');
 $('unit').onchange = $('layer').onchange = () => { setPadEnabled(false); setResult('padResult', ''); };
 $('volume').oninput = (e) => { $('volumeValue').textContent = td.formatVolume(+e.target.value); writeVolume(+e.target.value); };
 $('pan').oninput = (e) => { $('panValue').textContent = td.formatPan(+e.target.value); writePan(+e.target.value); };
-$('restorePad').onclick = () => { showPad(original.volume, original.pan); writeVolume(original.volume); writePan(original.pan); };
+$('volume').onchange = $('pan').onchange = confirmPad;
+$('restorePad').onclick = () => { showPad(original.volume, original.pan); writeVolume(original.volume); writePan(original.pan); confirmPad(); };
 $('clearLog').onclick = () => { $('log').textContent = ''; };
 $('copyLog').onclick = () => navigator.clipboard.writeText($('log').textContent);
 
