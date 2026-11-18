@@ -143,6 +143,9 @@
   .orig { display:none !important; left:calc(var(--o) * 100%); --c:var(--muted); opacity:.45; }
   .changed .orig { display:block !important; }
   .drag .thumb { --tw:34px; --th:30px; }
+  .fine .thumb { box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+  .pad:has(.fader.fine) .val, .drow:has(.fine) output, .big:has(.fine) .lab output { color:var(--level); }
+  .pad:has(.fader.fine.pan) .val, .drow:has(.fine.pan) output, .big:has(.fine.pan) .lab output { color:var(--pan); }
   #mixer .fader, .big .fader, .pad .name, .pad .val { padding-bottom:36px; }
   .big .ctl button { margin-bottom:36px; }
 
@@ -396,11 +399,23 @@ function padBand(pad, kind) {
   return [Math.min(leader, ...vs), Math.max(leader, ...vs)];
 }
 
+// Values a pad-view slider may snap to: the same kind of value elsewhere on the pad
+// (levels: every main, every sub that is on, Pedal HH or XStick; pans: every zone pan).
+function related(pad, kind, obj, key) {
+  const vals = kind === 'pan'
+    ? pad.zones.filter((z) => !(z === obj && key === 'pan')).map((z) => z.pan)
+    : [...pad.zones.flatMap((z) => [z === obj && key === 'main' ? null : z.main, z.subOn && !(z === obj && key === 'sub') ? z.sub : null]),
+       ...pad.extras.filter((x) => x !== obj).map((x) => x.value)];
+  return vals.filter((v) => v != null && v > VMIN);
+}
+
 // ---------- fader ----------
 // Grabbing is relative: a touch changes nothing until it has moved 8 px along the fader,
 // then the value follows the finger from where it was. Taps and brushes do nothing.
 const faders = new Set();
 const SNAP_PX = 5; // how close (in px along the fader) a drag must come to a sticky spot
+const HOLD_MS = 1000; // press and hold this long without moving for precision mode
+const FINE_PX = 6; // in precision mode, px of movement per 0.1 dB (or per pan step)
 function makeFader(o, extraClass = '') {
   const el = h('div', `fader ${extraClass}`);
   el.tabIndex = 0;
@@ -429,32 +444,52 @@ function makeFader(o, extraClass = '') {
     },
   };
   let st = null;
+  const buzz = (ms) => { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(ms); };
   el.addEventListener('pointerdown', (e) => {
     if (o.locked?.() || e.button > 0) return;
     const r = track.getBoundingClientRect(), vert = r.height > r.width;
     st = { x: e.clientX, y: e.clientY, vert, len: vert ? r.height : r.width, p0: KIND[kind()].pos(o.get()), on: false, slip: 0, snapped: o.get() };
+    // Press and hold without moving: precision mode. Every FINE_PX of movement is one step
+    // (0.1 dB, or one pan step), and nothing snaps.
+    const mine = st;
+    st.hold = setTimeout(() => {
+      if (st !== mine || st.on) return;
+      Object.assign(st, { on: true, fine: true, slip: 0, v0: o.get() });
+      try { el.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+      o.begin?.();
+      el.classList.add('drag', 'fine');
+      buzz(25);
+    }, HOLD_MS);
   });
+  el.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press must not open a menu
   el.addEventListener('pointermove', (e) => {
     if (!st) return;
     const dx = e.clientX - st.x, dy = st.y - e.clientY, along = st.vert ? dy : dx, across = st.vert ? dx : dy;
     const K = KIND[kind()];
+    if (st.fine) {
+      const v = clamp(st.v0 + Math.round(along / FINE_PX) * K.nudge, K.min, K.max);
+      if (v !== o.get()) { o.set(v); repaint(); }
+      return;
+    }
     if (!st.on) {
-      if (Math.abs(along) < 8) { if (Math.abs(across) > 14) st = null; return; }
+      if (Math.abs(along) < 8) { if (Math.abs(across) > 14) { clearTimeout(st.hold); st = null; } return; }
+      clearTimeout(st.hold);
       st.on = true; st.slip = along;
       try { el.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
       o.begin?.();
       el.classList.add('drag');
     }
     const pos = clamp(st.p0 + (along - st.slip) / st.len, 0, 1);
-    // Sticky spots: 0 dB or centre, and where the handle started from (the original value).
+    // Sticky spots: 0 dB or centre, where the handle started from (the original value), and,
+    // in the pad view, the current values of the related sliders (other mains, subs, Pedal HH...).
     const near = (t) => Math.abs(K.pos(t) - pos) * st.len;
-    const snap = [0, o.orig()].filter((t) => t >= K.min && t <= K.max && near(t) <= SNAP_PX).sort((a, b) => near(a) - near(b))[0];
-    if (snap !== undefined && snap !== st.snapped) { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(8); }
+    const snap = [0, o.orig(), ...(o.snaps?.() ?? [])].filter((t) => t >= K.min && t <= K.max && near(t) <= SNAP_PX).sort((a, b) => near(a) - near(b))[0];
+    if (snap !== undefined && snap !== st.snapped) buzz(8);
     st.snapped = snap;
     const v = snap ?? K.val(pos);
     if (v !== o.get()) { o.set(v); repaint(); }
   });
-  const end = () => { if (st?.on) el.classList.remove('drag'); st = null; };
+  const end = () => { if (st) { clearTimeout(st.hold); el.classList.remove('drag', 'fine'); } st = null; };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
   el.addEventListener('keydown', (e) => {
@@ -568,7 +603,7 @@ function openSheet(i) {
   const row = (label, kind, getObj, key, isSub) => {
     const r = h('div', 'drow'), lab = h('span', 'lab', label), out = h('output');
     const f = makeFader({
-      kind, label: () => `${PAD_NAMES[i]} ${label}`, locked: () => locked(i),
+      kind, label: () => `${PAD_NAMES[i]} ${label}`, locked: () => locked(i), snaps: () => related(S.pads[i], kind, getObj(S.pads[i]), key),
       get: () => getObj(S.pads[i])[key], set: (v) => { getObj(S.pads[i])[key] = v; }, orig: () => getObj(S.orig[i])[key],
     }, 'detail');
     r.append(lab, f.el, out);

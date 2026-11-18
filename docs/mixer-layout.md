@@ -73,4 +73,5 @@ Smaller things chosen without asking, still easy to change: cymbal zones are lab
 - − and + change Level by 0.1 dB (Pan by one step).
 - While dragging, the handle sticks to 0 dB (or centre for Pan) and to its original value when it comes within 5 px of them, with a short vibration on phones that allow it.
 - The blue fill and the orange bar are square where they end inside the range and rounded only where they meet the ends of the range.
-
+- In the pad view a slider also snaps to the current values of related sliders on the same pad: a level to the other mains, to subs that are on, and to Pedal HH or XStick; a pan to the other zones' pans.
+- Precision mode: press and hold a fader for 1 second without moving. The tab gets a ring, the value takes the fader's colour, and from then on every 6 px of movement is one step (0.1 dB or one pan step), with no snapping, until you let go.
