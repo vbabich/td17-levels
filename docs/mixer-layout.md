@@ -39,7 +39,7 @@ The Strips layout is in the mockup too (Mockup → Layout → Strips): 5 x 2 in 
 | Connection | Disconnected: a single large Connect button with the module instructions. Connecting: the button says so. Connected: green dot (tap it to disconnect). Reconnecting: the last known values stay visible but dimmed and locked, under an orange banner with the attempt count and a Stop button. |
 | Edits from the module | The fader moves and the row is highlighted for a moment. |
 | Getting back | The values first read from each kit are kept. A dashed ghost marks where a changed fader was. **Compare** shows the original values (faders locked, banner with "Back to my mix"); **Restore** puts the whole kit back after a confirmation that names the changed pads; **Restore pad** does it for one pad. |
-| Reading the value under a thumb | While a fader is held, a large readout (pad name and value) appears at the top of the screen. The row's own value is also off to the right of the fader, not under it. |
+| Reading the value under a thumb | The value sits at the end of the row and the handle hangs below the bar, so a hand reaching up from below covers neither. (The first mockups also showed a large readout at the top while dragging; it was removed as redundant on 2026-11-17.) |
 | Accidental touches | A fader does not jump to where it is touched. Nothing changes until the finger has moved 8 px along the fader; from there the value follows the finger from where it was. Taps and brushes do nothing, and the finger does not have to land on the thumb: anywhere on the row works. Pull-to-refresh is switched off. |
 | Dim light, both themes | Dark by default following the phone setting, with the tester's colours; light theme works. |
 

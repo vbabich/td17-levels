@@ -156,14 +156,6 @@
   body.strips #mixer .thumb { left:50%; top:auto; bottom:calc(var(--p) * 100%); transform:translate(-50%,50%); width:44px; height:24px; border-radius:7px; }
   body.strips #mixer .drag .thumb { width:50px; height:28px; }
 
-  /* ---------- big readout while a fader is held ---------- */
-  #hud { position:fixed; z-index:30; top:calc(env(safe-area-inset-top) + 6px); left:50%; transform:translateX(-50%); pointer-events:none;
-    background:var(--card); border:2px solid var(--level); border-radius:14px; padding:6px 20px; display:flex; align-items:baseline; gap:14px; white-space:nowrap; box-shadow:0 6px 24px rgba(0,0,0,.35); }
-  #hud.pan { border-color:var(--pan); }
-  #hud .who { font-size:16px; color:var(--muted); font-weight:600; }
-  #hud .num { font-size:34px; font-weight:700; font-variant-numeric:tabular-nums; }
-  #hud .num small { font-size:15px; color:var(--muted); font-weight:500; margin-left:4px; }
-
   /* ---------- not connected ---------- */
   #connect { grid-area:main; display:grid; place-content:center; justify-items:center; gap:16px; padding:24px; text-align:center; }
   #connect h1 { margin:0; font-size:22px; }
@@ -254,7 +246,6 @@
   <button id="restore" disabled>Restore</button>
 </nav>
 
-<div id="hud" hidden><span class="who"></span><span class="num"></span></div>
 
 <div id="sheet" hidden role="dialog" aria-modal="true">
   <div class="sheet-head">
@@ -462,9 +453,8 @@ function makeFader(o, extraClass = '') {
     st.snapped = snap;
     const v = snap ?? K.val(pos);
     if (v !== o.get()) { o.set(v); repaint(); }
-    showHud(o.label(), kind(), o.get());
   });
-  const end = () => { if (st?.on) { el.classList.remove('drag'); $('hud').hidden = true; } st = null; };
+  const end = () => { if (st?.on) el.classList.remove('drag'); st = null; };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
   el.addEventListener('keydown', (e) => {
@@ -474,13 +464,6 @@ function makeFader(o, extraClass = '') {
   });
   faders.add(f);
   return f;
-}
-function showHud(who, kind, v) {
-  const hud = $('hud');
-  hud.hidden = false;
-  hud.className = kind;
-  hud.querySelector('.who').textContent = who;
-  setValue(hud.querySelector('.num'), kind, v);
 }
 // A pad-wide Level or Pan: moves every value under it by the same amount.
 function padControl(i, kindOf) {
