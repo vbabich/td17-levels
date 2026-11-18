@@ -208,6 +208,8 @@
   #demo .opts { display:flex; flex-wrap:wrap; gap:6px; }
   #demo button { min-height:40px; font-size:14px; padding:0 10px; }
   #demo button[aria-pressed=true] { border-color:var(--demo); color:var(--demo); font-weight:600; }
+  #demo .lnk { display:inline-flex; align-items:center; min-height:40px; padding:0 10px; border:1px solid var(--line); border-radius:10px; font-size:14px; color:var(--text); text-decoration:none; }
+  #demo .lnk.on { border-color:var(--demo); color:var(--demo); font-weight:600; }
   #demo p { margin:0; font-size:12px; color:var(--muted); }
 </style>
 </head>
@@ -261,6 +263,7 @@
   <h2>Mockup controls <button id="demoClose" aria-label="Close">✕</button></h2>
   <p>Not part of the app. Everything on this page is fake data; nothing is sent to a module.</p>
   <div><h3>Layout</h3><div class="opts" id="optLayout"><button data-v="rows">Rows (recommended)</button><button data-v="strips">Strips</button></div></div>
+  <div><h3>Variant</h3><div class="opts"><span class="lnk on">Round thumbs</span><a class="lnk" href="mixer-mockup-triangle.html">Triangle thumbs</a></div></div>
   <div><h3>Connection</h3><div class="opts" id="optConn"><button data-v="disconnected">Disconnected</button><button data-v="connecting">Connecting</button><button data-v="connected">Connected</button><button data-v="reconnecting">Reconnecting</button></div></div>
   <div><h3>Pretend the module did something</h3><div class="opts"><button id="simKit">Kit changed</button><button id="simEdit">Knob turned (Tom 2)</button></div></div>
   <div><h3>Theme</h3><div class="opts" id="optTheme"><button data-v="">Auto</button><button data-v="dark">Dark</button><button data-v="light">Light</button></div></div>

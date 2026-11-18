@@ -61,6 +61,7 @@ The Strips layout is in the mockup too (Mockup → Layout → Strips): 5 x 2 in 
 5. **Getting back:** Compare plus Restore (plus Restore pad). The original values are what was read when you connected and are not kept after the page is closed.
 6. **Kit volume:** left on the module; the app shows ten pad rows only.
 7. **Discrepancy signs:** orange bar over the blue track, with triangle markers above each end pointing at it. No ring on the thumb, no flag on the name.
+   Open follow-up: a second mockup, [`mixer-mockup-triangle.html`](../mixer-mockup-triangle.html) (live at https://vbabich.github.io/td17-levels/mixer-mockup-triangle.html), replaces the round thumb with a larger triangle that sits above the track and points down at the value, so the thumb never covers the track or the orange bar and no extra markers are needed. A changed fader leaves a grey triangle at its original value. Still to choose: round thumb with markers, or triangle thumb. The Mockup panel in each page links to the other.
 8. **Install as an app:** yes. Installable to the home screen (manifest and icon), full screen, keeps the screen awake.
 
 Smaller things chosen without asking, still easy to change: cymbal zones are labelled Bow/Edge/Bell (the tester says Head/Rim); the − and + step is 0.5 dB; an edit made on the module counts as a change for Compare and Restore; opening a pad is by its name only, not by tapping the value.
