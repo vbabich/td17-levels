@@ -64,4 +64,13 @@ The Strips layout is in the mockup too (Mockup → Layout → Strips): 5 x 2 in 
 8. **Install as an app:** yes. Installable to the home screen (manifest and icon), full screen, keeps the screen awake.
 9. **Fader handle (decided 2026-11-17):** D, the playhead tab: a rounded tab with grip lines below the track, its point touching the track's lower edge. It never covers the track or the orange bar, and a hand reaching up from below does not cover the bar while dragging. Shown in [`mixer-mockup-tab.html`](../mixer-mockup-tab.html) (live at https://vbabich.github.io/td17-levels/mixer-mockup-tab.html). The other options considered are drawn in [`docs/handles/`](handles/handle-options-dark.svg). The round and triangle mockups stay for comparison; the Mockup panel switches between all three.
 
-Smaller things chosen without asking, still easy to change: cymbal zones are labelled Bow/Edge/Bell (the tester says Head/Rim); the − and + step is 0.5 dB; an edit made on the module counts as a change for Compare and Restore; opening a pad is by its name only, not by tapping the value.
+Smaller things chosen without asking, still easy to change: cymbal zones are labelled Bow/Edge/Bell (the tester says Head/Rim); an edit made on the module counts as a change for Compare and Restore; opening a pad is by its name only, not by tapping the value.
+
+## Corrections applied to the playhead-tab mockup (2026-11-17)
+
+- Pad names and values are centred on the bar's line, not on the whole row.
+- Nothing temporary pushes the layout down. The reconnecting and compare messages appear over the top bar. In the pad view the disagreement line is always present and one line long ("2 values disagree: Bow sub, Bell pan", or "All values under this pad agree"); the disagreeing rows are marked orange in the list below. The connection chip and the Compare button keep a fixed width in landscape.
+- − and + change Level by 0.1 dB (Pan by one step).
+- While dragging, the handle sticks to 0 dB (or centre for Pan) and to its original value when it comes within 5 px of them, with a short vibration on phones that allow it.
+- The blue fill and the orange bar are square where they end inside the range and rounded only where they meet the ends of the range.
+

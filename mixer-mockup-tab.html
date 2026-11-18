@@ -23,7 +23,7 @@
   html, body { height:100%; margin:0; overscroll-behavior:none; }
   body { background:var(--bg); color:var(--text); font:16px/1.3 system-ui, sans-serif; user-select:none; -webkit-user-select:none;
     height:100dvh; overflow:hidden; display:grid;
-    grid-template: "top" auto "progress" 3px "banner" auto "main" minmax(0,1fr) "tools" auto / minmax(0,1fr);
+    grid-template: "top" auto "progress" 3px "main" minmax(0,1fr) "tools" auto / minmax(0,1fr);
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   button { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:10px; min-height:44px; padding:0 14px; touch-action:manipulation; }
   button:disabled { opacity:.4; }
@@ -32,7 +32,7 @@
 
   /* ---------- top bar ---------- */
   #top { grid-area:top; display:flex; align-items:center; gap:8px; padding:6px 10px; min-width:0; }
-  #conn { display:flex; align-items:center; gap:8px; padding:0 12px; font-size:14px; white-space:nowrap; }
+  #conn { flex:none; display:flex; align-items:center; gap:8px; padding:0 12px; font-size:14px; white-space:nowrap; }
   #conn .dot { width:12px; height:12px; border-radius:50%; background:var(--muted); flex:none; }
   body[data-conn=connected] #conn .dot { background:var(--ok); }
   body[data-conn=connecting] #conn .dot, body[data-conn=reconnecting] #conn .dot { background:var(--spread); animation:pulse 1s infinite; }
@@ -45,10 +45,11 @@
   #progress { grid-area:progress; background:transparent; overflow:hidden; }
   #progress i { display:block; height:100%; width:0; background:var(--level); transition:width .25s linear; }
 
-  #banner { grid-area:banner; display:flex; align-items:center; gap:10px; padding:8px 12px; font-size:15px; font-weight:600; }
+  /* Shown over the top bar, never in the flow, so nothing below it moves. */
+  #banner { grid-area:top; z-index:5; display:flex; align-items:center; gap:10px; padding:0 10px 0 14px; font-size:15px; font-weight:600; line-height:1.2; }
   #banner span { flex:1; }
-  #banner.warn { background:color-mix(in srgb, var(--spread) 22%, var(--bg)); }
-  #banner.info { background:color-mix(in srgb, var(--level) 20%, var(--bg)); }
+  #banner.warn { background:color-mix(in srgb, var(--spread) 30%, var(--bg)); }
+  #banner.info { background:color-mix(in srgb, var(--level) 28%, var(--bg)); }
   #banner button { min-height:40px; }
 
   /* ---------- tools (bottom bar in portrait, joins the top bar in landscape) ---------- */
@@ -63,11 +64,11 @@
   body:not([data-conn=connected]) #tools { opacity:.35; pointer-events:none; }
 
   @media (orientation: landscape) {
-    body { grid-template: "top tools" auto "progress progress" 3px "banner banner" auto "main main" minmax(0,1fr) / minmax(0,1fr) auto; }
+    body { grid-template: "top tools" auto "progress progress" 3px "main main" minmax(0,1fr) / minmax(0,1fr) auto; }
     #tools { border-top:0; padding:6px 10px 6px 0; }
     #tools > button, .seg button { min-height:44px; }
-    .seg { flex:none; } #tools > button { flex:none; }
-    #banner { padding:5px 12px; }
+    .seg { flex:none; } #tools > button { flex:none; } #compare { width:104px; }
+    #conn { width:148px; }
   }
 
   /* ---------- mixer ---------- */
@@ -123,9 +124,10 @@
   .fader.locked { cursor:default; }
   .track { position:relative; flex:1; height:10px; border-radius:5px; background:var(--track); }
   .track i { position:absolute; display:block; }
-  .fill { top:0; bottom:0; left:0; width:calc(var(--p) * 100%); background:var(--fill); border-radius:5px; }
+  .bars { inset:0; overflow:hidden; border-radius:5px; } /* rounds the bars only where they meet the ends of the range */
+  .fill { top:0; bottom:0; left:0; width:calc(var(--p) * 100%); background:var(--fill); }
   .pan .fill { left:calc(min(.5, var(--p)) * 100%); width:calc(max(var(--p) - .5, .5 - var(--p)) * 100%); border-radius:0; }
-  .band { display:none !important; top:0; bottom:0; left:calc(var(--b0) * 100%); width:calc((var(--b1) - var(--b0)) * 100%); min-width:4px; background:var(--spread); border-radius:5px; }
+  .band { display:none !important; top:0; bottom:0; left:calc(var(--b0) * 100%); width:calc((var(--b1) - var(--b0)) * 100%); min-width:4px; background:var(--spread); }
   .spread .band { display:block !important; }
   .tick { top:-6px; bottom:-6px; left:calc(var(--z) * 100% - 1px); width:2px; background:var(--muted); opacity:.55; border-radius:1px; }
   /* Playhead tab below the track: a rounded tab with grip lines and a point touching the track's lower edge.
@@ -141,7 +143,8 @@
   .orig { display:none !important; left:calc(var(--o) * 100%); --c:var(--muted); opacity:.45; }
   .changed .orig { display:block !important; }
   .drag .thumb { --tw:34px; --th:30px; }
-  #mixer .fader, .big .fader { padding-bottom:36px; }
+  #mixer .fader, .big .fader, .pad .name, .pad .val { padding-bottom:36px; }
+  .big .ctl button { margin-bottom:36px; }
 
   body.strips #mixer .fader { flex-direction:column; padding:18px 0; min-height:0; touch-action:none; cursor:ns-resize; }
   body.strips #mixer .track { width:10px; height:auto; }
@@ -181,16 +184,20 @@
   .big .ctl { display:grid; grid-template-columns:52px minmax(0,1fr) 52px; align-items:center; }
   .big .ctl button { min-height:52px; padding:0; font-size:24px; }
   .big .fader { min-height:60px; }
-  .why { margin:6px 14px 2px; padding:10px 12px; border-radius:10px; font-size:15px; background:color-mix(in srgb, var(--spread) 18%, var(--bg)); border-left:4px solid var(--spread); }
-  .why div + div { margin-top:3px; }
+  .why { margin:6px 14px 2px; padding:10px 12px; border-radius:10px; font-size:15px; border-left:4px solid var(--line); background:var(--card); color:var(--muted);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .why.on { background:color-mix(in srgb, var(--spread) 18%, var(--bg)); border-left-color:var(--spread); color:var(--text); }
+  .drow { border-left:4px solid transparent; }
+  .drow.odd { border-left-color:var(--spread); }
+  .drow.odd output { color:var(--spread); }
   .detail-col h3 { margin:14px 14px 0; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .drow { display:grid; grid-template-columns:88px minmax(0,1fr) 84px; align-items:center; min-height:52px; }
-  .drow .lab { padding-left:14px; font-size:16px; }
+  .drow .lab { padding-left:10px; font-size:16px; }
   .drow.off .lab { color:var(--muted); }
   .drow output { font-size:18px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; padding-right:14px; white-space:nowrap; }
   .drow output small { font-size:12px; }
   .drow .thumb, .drow .orig { --tw:24px; --th:19px; --pt:8px; }
-  .drow .fader { padding-bottom:28px; }
+  .drow .fader, .drow .lab, .drow output { padding-bottom:28px; }
   @media (orientation: landscape) {
     .sheet-body { grid-template-columns:minmax(0,1fr) minmax(0,1fr); overflow:hidden; padding:0; }
     .sheet-body > div { overflow-y:auto; overscroll-behavior:contain; padding:8px 0 16px; min-height:0; }
@@ -301,7 +308,7 @@ function levelVal(p) {
   return VMAX;
 }
 const KIND = {
-  level: { min: VMIN, max: VMAX, pos: levelPos, val: levelVal, nudge: 5,
+  level: { min: VMIN, max: VMAX, pos: levelPos, val: levelVal, nudge: 1,
     fmt: (v) => v <= VMIN ? ['-INF', ''] : [(v > 0 ? '+' : v < 0 ? '−' : '') + (Math.abs(v) / 10).toFixed(1), 'dB'] },
   pan: { min: PMIN, max: PMAX, pos: (v) => (v - PMIN) / (PMAX - PMIN), val: (p) => Math.round(PMIN + p * (PMAX - PMIN)), nudge: 1,
     fmt: (v) => [v === 0 ? 'C' : v < 0 ? `L${-v}` : `R${v}`, ''] },
@@ -384,10 +391,10 @@ function disagreements(pad, kind) {
   const db = (d) => `${(Math.abs(d) / 10).toFixed(1)} dB ${d < 0 ? 'below' : 'above'}`;
   for (const l of layers(pad, kind)) {
     const v = l.o[l.k];
-    if (l.kind === 'pan' && v !== leader) out.push({ v, text: `${l.name} is ${fmtText('pan', v)}, ${lead.name} is ${fmtText('pan', leader)}` });
-    if (l.kind === 'main' && v !== leader) out.push({ v, text: `${l.name} is ${v <= VMIN ? 'at -INF' : db(v - leader) + ' ' + lead.name}` });
-    if (l.kind === 'sub' && l.o.subOn && Math.abs(v - l.o.main) >= SPREAD_MIN) out.push({ v, text: `${l.name} is ${db(v - l.o.main)} its main` });
-    if (l.kind === 'extra' && Math.abs(v - leader) >= SPREAD_MIN) out.push({ v, text: `${l.name} is ${db(v - leader)} the pad level` });
+    if (l.kind === 'pan' && v !== leader) out.push({ v, l, text: `${l.name} is ${fmtText('pan', v)}, ${lead.name} is ${fmtText('pan', leader)}` });
+    if (l.kind === 'main' && v !== leader) out.push({ v, l, text: `${l.name} is ${v <= VMIN ? 'at -INF' : db(v - leader) + ' ' + lead.name}` });
+    if (l.kind === 'sub' && l.o.subOn && Math.abs(v - l.o.main) >= SPREAD_MIN) out.push({ v, l, text: `${l.name} is ${db(v - l.o.main)} its main` });
+    if (l.kind === 'extra' && Math.abs(v - leader) >= SPREAD_MIN) out.push({ v, l, text: `${l.name} is ${db(v - leader)} the pad level` });
   }
   return out;
 }
@@ -402,11 +409,12 @@ function padBand(pad, kind) {
 // Grabbing is relative: a touch changes nothing until it has moved 8 px along the fader,
 // then the value follows the finger from where it was. Taps and brushes do nothing.
 const faders = new Set();
+const SNAP_PX = 5; // how close (in px along the fader) a drag must come to a sticky spot
 function makeFader(o, extraClass = '') {
   const el = h('div', `fader ${extraClass}`);
   el.tabIndex = 0;
   el.setAttribute('role', 'slider');
-  el.innerHTML = '<div class="track"><i class="fill"></i><i class="band"></i><i class="tick"></i><i class="orig"></i><i class="thumb"></i></div>';
+  el.innerHTML = '<div class="track"><i class="bars"><i class="fill"></i><i class="band"></i></i><i class="tick"></i><i class="orig"></i><i class="thumb"></i></div>';
   const track = el.firstChild;
   const kind = () => (typeof o.kind === 'function' ? o.kind() : o.kind);
   const f = {
@@ -433,7 +441,7 @@ function makeFader(o, extraClass = '') {
   el.addEventListener('pointerdown', (e) => {
     if (o.locked?.() || e.button > 0) return;
     const r = track.getBoundingClientRect(), vert = r.height > r.width;
-    st = { x: e.clientX, y: e.clientY, vert, len: vert ? r.height : r.width, p0: KIND[kind()].pos(o.get()), on: false, slip: 0 };
+    st = { x: e.clientX, y: e.clientY, vert, len: vert ? r.height : r.width, p0: KIND[kind()].pos(o.get()), on: false, slip: 0, snapped: o.get() };
   });
   el.addEventListener('pointermove', (e) => {
     if (!st) return;
@@ -446,7 +454,13 @@ function makeFader(o, extraClass = '') {
       o.begin?.();
       el.classList.add('drag');
     }
-    const v = K.val(clamp(st.p0 + (along - st.slip) / st.len, 0, 1));
+    const pos = clamp(st.p0 + (along - st.slip) / st.len, 0, 1);
+    // Sticky spots: 0 dB or centre, and where the handle started from (the original value).
+    const near = (t) => Math.abs(K.pos(t) - pos) * st.len;
+    const snap = [0, o.orig()].filter((t) => t >= K.min && t <= K.max && near(t) <= SNAP_PX).sort((a, b) => near(a) - near(b))[0];
+    if (snap !== undefined && snap !== st.snapped) { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(8); }
+    st.snapped = snap;
+    const v = snap ?? K.val(pos);
     if (v !== o.get()) { o.set(v); repaint(); }
     showHud(o.label(), kind(), o.get());
   });
@@ -530,8 +544,8 @@ function repaint() {
   $('compare').textContent = S.comparing ? 'Original' : 'Compare';
 
   const banner = $('banner');
-  if (S.conn === 'reconnecting') setBanner('warn', `Connection lost. Reconnecting (attempt ${S.attempt} of 3)…`, 'Stop', () => setConn('disconnected'));
-  else if (S.comparing && S.conn === 'connected') setBanner('info', 'Original values, as first read. Faders are locked.', 'Back to my mix', toggleCompare);
+  if (S.conn === 'reconnecting') setBanner('warn', `Reconnecting… (try ${S.attempt} of 3)`, 'Stop', () => setConn('disconnected'));
+  else if (S.comparing && S.conn === 'connected') setBanner('info', 'Showing original values', 'Back to mine', toggleCompare);
   else banner.hidden = true;
 
   if (S.open != null) paintSheet();
@@ -575,7 +589,7 @@ function openSheet(i) {
       get: () => getObj(S.pads[i])[key], set: (v) => { getObj(S.pads[i])[key] = v; }, orig: () => getObj(S.orig[i])[key],
     }, 'detail');
     r.append(lab, f.el, out);
-    rows.push({ r, lab, out, kind, get: f.o.get, sub: isSub ? () => getObj(S.pads[i]).subOn : null });
+    rows.push({ r, lab, out, kind, get: f.o.get, sub: isSub ? () => getObj(S.pads[i]).subOn : null, is: (l) => l.o === getObj(S.pads[i]) && l.k === key });
     return r;
   };
   const detail = [];
@@ -599,8 +613,12 @@ function paintSheet() {
     if (r.sub) { r.lab.textContent = r.sub() ? 'Sub' : 'Sub (off)'; r.r.classList.toggle('off', !r.sub()); }
   }
   const reasons = [...disagreements(S.pads[i], 'level'), ...disagreements(S.pads[i], 'pan')];
-  why.hidden = !reasons.length;
-  why.replaceChildren(...reasons.map((d) => h('div', '', d.text[0].toUpperCase() + d.text.slice(1))));
+  for (const r of rows) r.r.classList.toggle('odd', reasons.some((d) => r.is(d.l)));
+  why.classList.toggle('on', reasons.length > 0);
+  why.textContent = reasons.length
+    ? `${reasons.length === 1 ? '1 value disagrees' : `${reasons.length} values disagree`}: ${reasons.map((d) => d.l.name).join(', ')}`
+    : 'All values under this pad agree';
+  why.title = reasons.map((d) => d.text).join('\n');
   $('padRestore').disabled = !isChanged(i);
 }
 function hideSheet() {
