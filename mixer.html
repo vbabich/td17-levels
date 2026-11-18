@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5f5f3" media="(prefers-color-scheme: light)">
+<meta name="mobile-web-app-capable" content="yes">
+<title>TD-17 Mixer</title>
+<link rel="manifest" href="mixer.webmanifest">
+<link rel="icon" href="mixer-icon-192.png" sizes="192x192" type="image/png">
+<style>
+  :root { color-scheme: light dark;
+    --bg:#f5f5f3; --card:#fff; --raise:#ecece8; --text:#1c1c1a; --muted:#6b6b66; --line:#d9d9d4; --accent:#d2491f;
+    --ok:#1d7a3e; --bad:#b3261e; --level:#3d9fe6; --level-detail:#2c6fb0; --pan:#3fb573; --track:#d6d6cf; --spread:#ec6a00; --demo:#6d4bd1; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { color-scheme: dark;
+    --bg:#121211; --card:#1e1e1c; --raise:#2a2a27; --text:#f0f0ec; --muted:#a3a39c; --line:#363633; --accent:#ff7a4d;
+    --ok:#5fcf85; --bad:#ff8a80; --level:#6cc0f7; --level-detail:#3f86c4; --pan:#7ddba0; --track:#45453f; --spread:#ffa040; --demo:#b39dff; } }
+  :root[data-theme=dark] { color-scheme: dark;
+    --bg:#121211; --card:#1e1e1c; --raise:#2a2a27; --text:#f0f0ec; --muted:#a3a39c; --line:#363633; --accent:#ff7a4d;
+    --ok:#5fcf85; --bad:#ff8a80; --level:#6cc0f7; --level-detail:#3f86c4; --pan:#7ddba0; --track:#45453f; --spread:#ffa040; --demo:#b39dff; }
+  :root[data-theme=light] { color-scheme: light; }
+
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  [hidden] { display:none !important; }
+  html, body { height:100%; margin:0; overscroll-behavior:none; }
+  body { background:var(--bg); color:var(--text); font:16px/1.3 system-ui, sans-serif; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+    height:100dvh; overflow:hidden; display:grid;
+    grid-template: "top" auto "progress" 3px "main" minmax(0,1fr) "tools" auto / minmax(0,1fr);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  button { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:10px; min-height:44px; padding:0 14px; touch-action:manipulation; }
+  button:disabled { opacity:.4; }
+  button:focus-visible, .fader:focus-visible { outline:2px solid var(--level); outline-offset:1px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+
+  /* ---------- top bar ---------- */
+  #top { grid-area:top; display:flex; align-items:center; gap:8px; padding:6px 10px; min-width:0; }
+  #conn { flex:none; display:flex; align-items:center; gap:8px; padding:0 12px; font-size:14px; white-space:nowrap; }
+  #conn .dot { width:12px; height:12px; border-radius:50%; background:var(--muted); flex:none; }
+  body[data-conn=connected] #conn .dot { background:var(--ok); }
+  body[data-conn=connecting] #conn .dot, body[data-conn=reconnecting] #conn .dot { background:var(--spread); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.25; } }
+  #kit { flex:1; min-width:0; display:flex; align-items:baseline; gap:8px; white-space:nowrap; overflow:hidden; }
+  #kit .no { font-size:13px; color:var(--muted); font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+  #kit .name { font-size:19px; font-weight:650; overflow:hidden; text-overflow:ellipsis; }
+  #simBtn { border:1.5px dashed var(--demo); color:var(--demo); background:transparent; font-size:13px; padding:0 10px; min-height:36px; flex:none; }
+
+  #progress { grid-area:progress; background:transparent; overflow:hidden; }
+  #progress i { display:block; height:100%; width:0; background:var(--level); transition:width .25s linear; }
+
+  /* Shown over the top bar, never in the flow, so nothing below it moves. */
+  #banner { grid-area:top; z-index:5; display:flex; align-items:center; gap:10px; padding:0 10px 0 14px; font-size:15px; font-weight:600; line-height:1.2; min-width:0; }
+  #banner span { flex:1; min-width:0; }
+  #banner.warn { background:color-mix(in srgb, var(--spread) 30%, var(--bg)); }
+  #banner.info { background:color-mix(in srgb, var(--level) 28%, var(--bg)); }
+  #banner button { min-height:40px; flex:none; }
+
+  /* ---------- tools (bottom bar in portrait, joins the top bar in landscape) ---------- */
+  #tools { grid-area:tools; display:flex; gap:8px; padding:8px 10px; border-top:1px solid var(--line); }
+  #tools > button { flex:1; min-height:48px; padding:0 8px; }
+  .seg { display:flex; flex:1.6; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--card); }
+  .seg button { flex:1; border:0; border-radius:0; background:transparent; min-height:46px; font-weight:600; color:var(--muted); padding:0 10px; }
+  .seg button[aria-pressed=true][data-mode=level] { background:var(--level); color:#06202f; }
+  .seg button[aria-pressed=true][data-mode=pan] { background:var(--pan); color:#062514; }
+  #compare[aria-pressed=true] { background:var(--level); border-color:var(--level); color:#06202f; font-weight:600; }
+  body:not([data-conn=connected]) #tools { opacity:.35; pointer-events:none; }
+
+  @media (min-width: 441px) { #conn { width:148px; } }
+  @media (orientation: landscape) {
+    body { grid-template: "top tools" auto "progress progress" 3px "main main" minmax(0,1fr) / minmax(0,1fr) auto; }
+    #tools { border-top:0; padding:6px 10px 6px 0; }
+    #tools > button, .seg button { min-height:44px; }
+    .seg { flex:none; } #tools > button { flex:none; padding:0 14px; } #compare { width:104px; }
+    #conn { width:148px; }
+  }
+
+  /* ---------- mixer: one column of rows in portrait, two in landscape ---------- */
+  #mixer { grid-area:main; display:grid; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+    grid-template-columns:minmax(0,1fr); grid-auto-rows:minmax(48px,1fr); }
+  .pad { display:grid; min-width:0; min-height:0; align-items:stretch; grid-template-columns:90px minmax(0,1fr) 72px; border-top:1px solid var(--line); }
+  .pad .name { position:relative; border:0; border-radius:0; background:transparent; font-size:17px; font-weight:650; text-align:left; display:flex; align-items:center; gap:6px; min-width:0; padding:0 2px 0 12px; }
+  .pad .name::after { content:"›"; color:var(--muted); font-weight:400; margin-left:auto; }
+  .pad .name b { font-weight:inherit; white-space:nowrap; }
+  .pad .val { font-size:20px; font-weight:650; font-variant-numeric:tabular-nums; display:flex; align-items:center; justify-content:flex-end; gap:3px; padding-right:12px; white-space:nowrap; }
+  .val small { font-size:12px; font-weight:500; color:var(--muted); }
+  @media (max-width: 440px) { .pad .val small { display:none; } #conn span { display:none; } body[data-conn=connecting] #conn span, body[data-conn=disconnected] #conn span { display:inline; } }
+  .pad.flash .val { color:var(--accent); }
+  .pad.flash { background:color-mix(in srgb, var(--accent) 12%, transparent); }
+  .pad.loading { opacity:.35; }
+  .pad.loading .fader { visibility:hidden; }
+  .pad:has(.fader.drag) { background:var(--raise); }
+  body.locked #mixer .fader { opacity:.55; }
+  @media (orientation: landscape) {
+    #mixer { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(5,minmax(48px,1fr)); grid-auto-flow:column; }
+    .pad:nth-child(n+6) { border-left:1px solid var(--line); }
+  }
+  @media (min-width: 441px) { .pad { grid-template-columns:90px minmax(0,1fr) 92px; } } /* room for −10.3 dB once the unit shows */
+  @media (min-width: 700px) and (min-height: 700px) {
+    .pad { grid-template-columns:130px minmax(0,1fr) 110px; }
+    #mixer { grid-auto-rows:minmax(48px,120px); align-content:center; }
+    .pad .name { font-size:20px; } .pad .val { font-size:24px; }
+  }
+  @media (min-width: 700px) and (min-height: 700px) and (orientation: landscape) {
+    #mixer { grid-template-rows:repeat(5,minmax(48px,120px)); }
+  }
+
+  /* ---------- fader ---------- */
+  .fader { --p:0; --z:.8; --o:0; --b0:0; --b1:0; --fill:var(--level);
+    position:relative; display:flex; align-items:center; padding:0 16px; min-height:48px; min-width:0; touch-action:pan-y; cursor:ew-resize; outline-offset:-2px; }
+  .fader.pan { --fill:var(--pan); --z:.5; }
+  .fader.detail:not(.pan) { --fill:var(--level-detail); }
+  .fader.locked { cursor:default; }
+  .track { position:relative; flex:1; height:10px; border-radius:5px; background:var(--track); }
+  .track i { position:absolute; display:block; }
+  .bars { inset:0; overflow:hidden; border-radius:5px; } /* rounds the bars only where they meet the ends of the range */
+  .fill { top:0; bottom:0; left:0; width:calc(var(--p) * 100%); background:var(--fill); }
+  .pan .fill { left:calc(min(.5, var(--p)) * 100%); width:calc(max(var(--p) - .5, .5 - var(--p)) * 100%); border-radius:0; }
+  .band { display:none !important; top:0; bottom:0; left:calc(var(--b0) * 100%); width:calc((var(--b1) - var(--b0)) * 100%); min-width:4px; background:var(--spread); }
+  .spread .band { display:block !important; }
+  .tick { top:-6px; bottom:-6px; left:calc(var(--z) * 100% - 1px); width:2px; background:var(--muted); opacity:.55; border-radius:1px; }
+  /* Playhead tab below the track: a rounded tab with grip lines and a point touching the track's lower edge. */
+  .thumb, .orig { --tw:30px; --th:26px; --pt:10px; --c:var(--fill);
+    left:calc(var(--p) * 100%); top:calc(100% + var(--pt) + 2px); width:var(--tw); height:var(--th); transform:translateX(-50%); border-radius:6px;
+    background:linear-gradient(to right, transparent calc(50% - 7px), var(--grip) calc(50% - 7px) calc(50% - 5px), transparent calc(50% - 5px) calc(50% - 1px),
+        var(--grip) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px) calc(50% + 5px), var(--grip) calc(50% + 5px) calc(50% + 7px), transparent calc(50% + 7px))
+      center / 100% 50% no-repeat, var(--c);
+    --grip:color-mix(in srgb, var(--bg) 55%, transparent); }
+  .thumb::before, .orig::before { content:""; position:absolute; left:50%; bottom:calc(100% - 1px); transform:translateX(-50%);
+    border:solid transparent; border-width:0 calc(var(--tw) / 2 - 2px) var(--pt); border-bottom-color:var(--c); }
+  .orig { display:none !important; left:calc(var(--o) * 100%); --c:var(--muted); opacity:.45; }
+  .changed .orig { display:block !important; }
+  .drag .thumb { --tw:34px; --th:30px; }
+  .fine .thumb { box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+  .pad:has(.fader.fine) .val, .drow:has(.fine) output, .big:has(.fine) .lab output { color:var(--level); }
+  .pad:has(.fader.fine.pan) .val, .drow:has(.fine.pan) output, .big:has(.fine.pan) .lab output { color:var(--pan); }
+  #mixer .fader, .big .fader, .pad .name, .pad .val { padding-bottom:36px; }
+  .big .ctl button { margin-bottom:36px; }
+
+  /* ---------- not connected ---------- */
+  #connect { grid-area:main; display:grid; place-content:center; justify-items:center; gap:16px; padding:24px; text-align:center; }
+  #connect h1 { margin:0; font-size:22px; }
+  #connect p { margin:0; color:var(--muted); max-width:30em; font-size:15px; }
+  #connect #connectMsg { color:var(--bad); font-weight:600; min-height:1.3em; }
+  #connect button { min-height:60px; font-size:19px; padding:0 28px; }
+
+  /* ---------- one pad opened ---------- */
+  #sheet { position:fixed; z-index:20; inset:0; background:var(--bg); display:grid; grid-template-rows:auto minmax(0,1fr);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .sheet-head { display:flex; align-items:center; gap:8px; padding:8px 10px 8px 14px; border-bottom:1px solid var(--line); }
+  .sheet-head h2 { flex:1; margin:0; font-size:22px; min-width:0; }
+  .sheet-body { overflow-y:auto; overscroll-behavior:contain; padding:10px 0 24px; display:grid; align-content:start; gap:4px; width:100%; max-width:900px; margin:0 auto; }
+  .sheet-body > div { min-width:0; }
+  .big { padding:4px 10px; }
+  .big .lab { display:flex; align-items:baseline; justify-content:space-between; padding:0 6px; }
+  .big .lab span { font-size:15px; color:var(--muted); font-weight:600; }
+  .big .lab output { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .big .lab output small { font-size:14px; }
+  .big .ctl { display:grid; grid-template-columns:52px minmax(0,1fr) 52px; align-items:center; }
+  .big .ctl button { min-height:52px; padding:0; font-size:24px; }
+  .big .fader { min-height:60px; }
+  .why { margin:6px 14px 2px; padding:10px 12px; border-radius:10px; font-size:15px; border-left:4px solid var(--line); background:var(--card); color:var(--muted);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .why.on { background:color-mix(in srgb, var(--spread) 18%, var(--bg)); border-left-color:var(--spread); color:var(--text); }
+  .drow { border-left:4px solid transparent; display:grid; grid-template-columns:88px minmax(0,1fr) 84px; align-items:center; min-height:52px; }
+  .drow.odd { border-left-color:var(--spread); }
+  .drow.odd output { color:var(--spread); }
+  .detail-col h3 { margin:14px 14px 0; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .drow .lab { padding-left:10px; font-size:16px; }
+  .drow.off .lab { color:var(--muted); }
+  .drow output { font-size:18px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; padding-right:14px; white-space:nowrap; }
+  .drow output small { font-size:12px; }
+  .drow .thumb, .drow .orig { --tw:24px; --th:19px; --pt:8px; }
+  .drow .fader, .drow .lab, .drow output { padding-bottom:28px; }
+  @media (orientation: landscape) {
+    .sheet-body { grid-template-columns:minmax(0,1fr) minmax(0,1fr); overflow:hidden; padding:0; }
+    .sheet-body > div { overflow-y:auto; overscroll-behavior:contain; padding:8px 0 16px; min-height:0; }
+    .detail-col { border-left:1px solid var(--line); }
+    .detail-col h3:first-child { margin-top:6px; }
+    .sheet-head { padding-top:5px; padding-bottom:5px; }
+  }
+
+  /* ---------- dialogs ---------- */
+  dialog { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); padding:18px; max-width:min(92vw, 420px); }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
+  dialog h2 { margin:0 0 8px; font-size:19px; }
+  dialog p { margin:0 0 16px; color:var(--muted); }
+  dialog .btns { display:flex; gap:8px; justify-content:flex-end; }
+  dialog .btns button { min-height:48px; }
+
+  /* ---------- only with ?sim ---------- */
+  #simPanel { border:2px dashed var(--demo); }
+  #simPanel h2 { color:var(--demo); font-size:15px; }
+  #simPanel .opts { display:flex; flex-wrap:wrap; gap:6px; }
+  #simPanel button { min-height:40px; font-size:14px; padding:0 10px; }
+</style>
+</head>
+<body data-conn="disconnected">
+
+<header id="top">
+  <button id="conn" aria-label="Connection"><i class="dot"></i><span id="connText">Not connected</span></button>
+  <div id="kit"><span class="no" id="kitNo"></span><span class="name" id="kitName"></span></div>
+  <button id="simBtn" hidden>Sim ▾</button>
+</header>
+<div id="progress"><i></i></div>
+<div id="banner" hidden><span></span><button></button></div>
+
+<main id="mixer" hidden></main>
+
+<section id="connect">
+  <h1>TD-17 mixer</h1>
+  <button class="primary" id="connectBtn">Connect via Bluetooth</button>
+  <p>On the module: SETUP → Bluetooth → Bluetooth MIDI on. Connect from here, not from the phone's Bluetooth settings.</p>
+  <p id="connectMsg" role="status"></p>
+</section>
+
+<nav id="tools">
+  <div class="seg" role="group" aria-label="What the faders control">
+    <button data-mode="level" aria-pressed="true">Level</button>
+    <button data-mode="pan" aria-pressed="false">Pan</button>
+  </div>
+  <button id="compare" aria-pressed="false" disabled>Compare</button>
+  <button id="restore" disabled>Restore</button>
+</nav>
+
+<div id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-head">
+    <h2 id="sheetTitle"></h2>
+    <button id="padRestore">Restore pad</button>
+    <button id="sheetClose" class="primary">Done</button>
+  </div>
+  <div class="sheet-body">
+    <div class="main-col" id="sheetMain"></div>
+    <div class="detail-col" id="sheetDetail"></div>
+  </div>
+</div>
+
+<dialog id="confirm">
+  <h2></h2><p></p>
+  <div class="btns"><button data-no>Cancel</button><button data-yes class="primary"></button></div>
+</dialog>
+
+<dialog id="simPanel">
+  <h2>Simulated module</h2>
+  <p>Only with ?sim. Pretend the module did something.</p>
+  <div class="opts" id="simOpts"></div>
+</dialog>
+
+<script type="module" src="mixer.js?v=1"></script>
+</body>
+</html>

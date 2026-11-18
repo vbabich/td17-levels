@@ -1,0 +1,17 @@
+{
+  "name": "TD-17 Mixer",
+  "short_name": "TD-17 Mixer",
+  "description": "Adjust the pad levels and pans of a Roland TD-17 from the drum throne.",
+  "id": "./mixer.html",
+  "start_url": "./mixer.html",
+  "scope": "./mixer.html",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#121211",
+  "theme_color": "#121211",
+  "icons": [
+    { "src": "mixer-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "mixer-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "mixer-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
