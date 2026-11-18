@@ -63,8 +63,9 @@ The Strips layout is in the mockup too (Mockup → Layout → Strips): 5 x 2 in 
 7. **Discrepancy signs:** orange bar over the blue track. With the handle below the track (decision 9) nothing hides the bar, so the triangle markers, the ring on the thumb and the flag on the name are all dropped.
 8. **Install as an app:** yes. Installable to the home screen (manifest and icon), full screen, keeps the screen awake.
 9. **Fader handle (decided 2026-11-17):** D, the playhead tab: a rounded tab with grip lines below the track, its point touching the track's lower edge. It never covers the track or the orange bar, and a hand reaching up from below does not cover the bar while dragging. Shown in [`mixer-mockup-tab.html`](../mixer-mockup-tab.html) (live at https://vbabich.github.io/td17-levels/mixer-mockup-tab.html). The other options considered are drawn in [`docs/handles/`](handles/handle-options-dark.svg). The round and triangle mockups stay for comparison; the Mockup panel switches between all three.
+10. **Edits made on the module (decided 2026-11-17):** they move the current value only. The original stays as read when you connected, so a knob turn shows as a change (grey tab at the old value) and Restore undoes it too: Restore means "everything since I connected".
 
-Smaller things chosen without asking, still easy to change: cymbal zones are labelled Bow/Edge/Bell (the tester says Head/Rim); an edit made on the module counts as a change for Compare and Restore; opening a pad is by its name only, not by tapping the value.
+Smaller things chosen without asking, still easy to change: cymbal zones are labelled Bow/Edge/Bell (the tester says Head/Rim); opening a pad is by its name only, not by tapping the value.
 
 ## Corrections applied to the playhead-tab mockup (2026-11-17)
 
