@@ -6,7 +6,7 @@ The mockup is a static page with fake data. It does not use Bluetooth and does n
 
 It was checked in a desktop browser at 375x812, 812x375, 412x915, 768x1024 and 1024x768, dark and light. It has not been tried on a real phone yet, so how the drag feels under a finger is the first thing to judge.
 
-## Recommended layout: rows
+## Chosen layout: rows
 
 Ten horizontal faders, one pad per row: name on the left, fader in the middle, value on the right.
 
@@ -52,7 +52,7 @@ The Strips layout is in the mockup too (Mockup → Layout → Strips): 5 x 2 in 
 
 ## Decisions for you
 
-1. **Rows or Strips?** Rows is recommended. Try both on the phone, in the holder, in both orientations.
+1. ~~**Rows or Strips?**~~ **Decided 2026-11-17: Rows.** Strips stays in the mockup only for reference and will not be built.
 2. **Relative grab.** Is "nothing happens until you drag, and you can drag from anywhere on the row" right, or do you want the fader to respond only when the thumb itself is grabbed?
 3. **Fader scale.** Keep the stretched scale (more travel between -12 and +6 dB), or linear as in the tester?
 4. **Pan by switch.** Is a Level/Pan switch for the whole screen acceptable, or should pan live only inside each pad's view?
