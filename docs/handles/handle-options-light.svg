@@ -1,0 +1,331 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 1290" width="1220" height="1290" font-family="system-ui, -apple-system, Roboto, sans-serif">
+<defs><filter id="grey"><feColorMatrix type="saturate" values="0"/></filter></defs>
+<rect width="1220" height="1290" fill="#f5f5f3"/>
+<text x="24" y="44" font-size="26" font-weight="700" fill="#1c1c1a">TD-17 mixer: fader handle options (light)</text>
+<text x="24" y="74" font-size="15" fill="#6b6b66">Each card: Hi-Hat Level with an orange spread bar, Ride Pan with a spread, and Kick changed (faded handle = original value).</text>
+<text x="24" y="96" font-size="15" fill="#6b6b66">No handle covers the track. Rows are drawn at real phone size (375 px wide). The whole row stays the grab area, whatever the handle looks like.</text>
+<g transform="translate(24,118)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">A. Triangle above</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="200.3,11.0 230.3,11.0 215.3,36.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="239.9,11.0 269.9,11.0 254.9,36.0" fill="#3fb573" stroke="#3fb573" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><polygon points="230.1,11.0 260.1,11.0 245.1,36.0" fill="#6b6b66" stroke="#6b6b66" stroke-width="3" stroke-linejoin="round" /></g>
+<polygon points="172.4,11.0 202.4,11.0 187.4,36.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">The current second mockup.</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">Your finger rests over the track while dragging.</text>
+</g>
+<g transform="translate(420,118)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">B. Triangle below</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="200.3,77.0 230.3,77.0 215.3,52.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="239.9,77.0 269.9,77.0 254.9,52.0" fill="#3fb573" stroke="#3fb573" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><polygon points="230.1,77.0 260.1,77.0 245.1,52.0" fill="#6b6b66" stroke="#6b6b66" stroke-width="3" stroke-linejoin="round" /></g>
+<polygon points="172.4,77.0 202.4,77.0 187.4,52.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Same shape, pointing up from below.</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">Hand comes from below, so the bar stays in view.</text>
+</g>
+<g transform="translate(816,118)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">C. Caliper</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="204.3,20.0 226.3,20.0 215.3,36.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><polygon points="204.3,68.0 226.3,68.0 215.3,52.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="243.9,20.0 265.9,20.0 254.9,36.0" fill="#3fb573" stroke="#3fb573" stroke-width="3" stroke-linejoin="round" /><polygon points="243.9,68.0 265.9,68.0 254.9,52.0" fill="#3fb573" stroke="#3fb573" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><polygon points="234.1,20.0 256.1,20.0 245.1,36.0" fill="#6b6b66" stroke="#6b6b66" stroke-width="3" stroke-linejoin="round" /><polygon points="234.1,68.0 256.1,68.0 245.1,52.0" fill="#6b6b66" stroke="#6b6b66" stroke-width="3" stroke-linejoin="round" /></g>
+<polygon points="176.4,20.0 198.4,20.0 187.4,36.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><polygon points="176.4,68.0 198.4,68.0 187.4,52.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" />
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Two smaller triangles pinch the track.</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">Reads precisely; the lower one is the one you hold.</text>
+</g>
+<g transform="translate(24,506)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">D. Playhead tab</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="215.3,52.0 229.3,61.0 229.3,83.0 201.3,83.0 201.3,61.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><line x1="209.32" y1="66" x2="209.32" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="215.32" y1="66" x2="215.32" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="221.32" y1="66" x2="221.32" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polygon points="254.9,52.0 268.9,61.0 268.9,83.0 240.9,83.0 240.9,61.0" fill="#3fb573" stroke="#3fb573" stroke-width="3" stroke-linejoin="round" /><line x1="248.938" y1="66" x2="248.938" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="254.938" y1="66" x2="254.938" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="260.938" y1="66" x2="260.938" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><polygon points="245.1,52.0 259.1,61.0 259.1,83.0 231.1,83.0 231.1,61.0" fill="#6b6b66" stroke="#6b6b66" stroke-width="3" stroke-linejoin="round" /><line x1="239.08" y1="66" x2="239.08" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="245.08" y1="66" x2="245.08" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="251.08" y1="66" x2="251.08" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/></g>
+<polygon points="187.4,52.0 201.4,61.0 201.4,83.0 173.4,83.0 173.4,61.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><line x1="181.42000000000002" y1="66" x2="181.42000000000002" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="187.42000000000002" y1="66" x2="187.42000000000002" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/><line x1="193.42000000000002" y1="66" x2="193.42000000000002" y2="78" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".6"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Rounded tab with a point and grip lines.</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">Bigger target, still clear of the bar.</text>
+</g>
+<g transform="translate(420,506)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">E. Map pin</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<path d="M215.32,52 L225.72,69 A12 12 0 1 1 204.92,69 Z" fill="#3d9fe6"/><circle cx="215.32" cy="75" r="4.5" fill="#ffffff"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<path d="M254.938,52 L265.33799999999997,69 A12 12 0 1 1 244.53799999999998,69 Z" fill="#3fb573"/><circle cx="254.938" cy="75" r="4.5" fill="#ffffff"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><path d="M245.08,52 L255.48000000000002,69 A12 12 0 1 1 234.68,69 Z" fill="#6b6b66"/><circle cx="245.08" cy="75" r="4.5" fill="#ffffff"/></g>
+<path d="M187.42000000000002,52 L197.82000000000002,69 A12 12 0 1 1 177.02,69 Z" fill="#3d9fe6"/><circle cx="187.42000000000002" cy="75" r="4.5" fill="#ffffff"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Round head under the track, tip on it.</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">Friendly; round head fits a fingertip.</text>
+</g>
+<g transform="translate(816,506)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">F. Console fader cap</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<defs><linearGradient id="glight50" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></linearGradient></defs><polygon points="215.3,52.0 220.3,58.0 210.3,58.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><rect x="198.32" y="58" width="34" height="28" rx="4" fill="url(#glight50)" stroke="#6f6f69" stroke-width="1"/><line x1="204.32" y1="62" x2="204.32" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="208.32" y1="62" x2="208.32" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="222.32" y1="62" x2="222.32" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="226.32" y1="62" x2="226.32" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><rect x="213.32" y="59" width="4" height="26" rx="1" fill="#3d9fe6"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<defs><linearGradient id="glight51" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></linearGradient></defs><polygon points="254.9,52.0 259.9,58.0 249.9,58.0" fill="#3fb573" stroke="#3fb573" stroke-width="3" stroke-linejoin="round" /><rect x="237.938" y="58" width="34" height="28" rx="4" fill="url(#glight51)" stroke="#6f6f69" stroke-width="1"/><line x1="243.938" y1="62" x2="243.938" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="247.938" y1="62" x2="247.938" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="261.938" y1="62" x2="261.938" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="265.938" y1="62" x2="265.938" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><rect x="252.938" y="59" width="4" height="26" rx="1" fill="#3fb573"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><defs><linearGradient id="glight52g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></linearGradient></defs><polygon points="245.1,52.0 250.1,58.0 240.1,58.0" fill="#6b6b66" stroke="#6b6b66" stroke-width="3" stroke-linejoin="round" /><rect x="228.08" y="58" width="34" height="28" rx="4" fill="url(#glight52g)" stroke="#6f6f69" stroke-width="1"/><line x1="234.08" y1="62" x2="234.08" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="238.08" y1="62" x2="238.08" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="252.08" y1="62" x2="252.08" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="256.08000000000004" y1="62" x2="256.08000000000004" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><rect x="243.08" y="59" width="4" height="26" rx="1" fill="#6b6b66"/></g>
+<defs><linearGradient id="glight52" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></linearGradient></defs><polygon points="187.4,52.0 192.4,58.0 182.4,58.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><rect x="170.42000000000002" y="58" width="34" height="28" rx="4" fill="url(#glight52)" stroke="#6f6f69" stroke-width="1"/><line x1="176.42000000000002" y1="62" x2="176.42000000000002" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="180.42000000000002" y1="62" x2="180.42000000000002" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="194.42000000000002" y1="62" x2="194.42000000000002" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><line x1="198.42000000000002" y1="62" x2="198.42000000000002" y2="84" stroke="#6f6f69" stroke-width="1.5" opacity=".7"/><rect x="185.42000000000002" y="59" width="4" height="26" rx="1" fill="#3d9fe6"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Ribbed grey cap with a coloured index line,</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">set below the track. Most realistic.</text>
+</g>
+<g transform="translate(24,894)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">G. Open window</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<path d="M200.32,36 V33 Q200.32,27 206.32,27 H224.32 Q230.32,27 230.32,33 V36 M200.32,52 V55 Q200.32,61 206.32,61 H224.32 Q230.32,61 230.32,55 V52" fill="none" stroke="#3d9fe6" stroke-width="4" stroke-linecap="round"/><path d="M215.32,27 V35 M215.32,61 V53" stroke="#3d9fe6" stroke-width="3" stroke-linecap="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<path d="M239.938,36 V33 Q239.938,27 245.938,27 H263.938 Q269.938,27 269.938,33 V36 M239.938,52 V55 Q239.938,61 245.938,61 H263.938 Q269.938,61 269.938,55 V52" fill="none" stroke="#3fb573" stroke-width="4" stroke-linecap="round"/><path d="M254.938,27 V35 M254.938,61 V53" stroke="#3fb573" stroke-width="3" stroke-linecap="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><path d="M230.08,36 V33 Q230.08,27 236.08,27 H254.08000000000004 Q260.08000000000004,27 260.08000000000004,33 V36 M230.08,52 V55 Q230.08,61 236.08,61 H254.08000000000004 Q260.08000000000004,61 260.08000000000004,55 V52" fill="none" stroke="#6b6b66" stroke-width="4" stroke-linecap="round"/><path d="M245.08,27 V35 M245.08,61 V53" stroke="#6b6b66" stroke-width="3" stroke-linecap="round"/></g>
+<path d="M172.42000000000002,36 V33 Q172.42000000000002,27 178.42000000000002,27 H196.42000000000002 Q202.42000000000002,27 202.42000000000002,33 V36 M172.42000000000002,52 V55 Q172.42000000000002,61 178.42000000000002,61 H196.42000000000002 Q202.42000000000002,61 202.42000000000002,55 V52" fill="none" stroke="#3d9fe6" stroke-width="4" stroke-linecap="round"/><path d="M187.42000000000002,27 V35 M187.42000000000002,61 V53" stroke="#3d9fe6" stroke-width="3" stroke-linecap="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Frame around the value, open where the</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">track passes. Nothing crosses the bar.</text>
+</g>
+<g transform="translate(420,894)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">H. Knurled knob</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<defs><radialGradient id="klight70" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></radialGradient></defs><polygon points="215.3,52.0 220.3,59.0 210.3,59.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><circle cx="215.32" cy="75" r="15" fill="url(#klight70)" stroke="#6f6f69" stroke-width="3" stroke-dasharray="2.2 2.2"/><line x1="215.32" y1="74" x2="215.32" y2="63" stroke="#3d9fe6" stroke-width="3.5" stroke-linecap="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<defs><radialGradient id="klight71" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></radialGradient></defs><polygon points="254.9,52.0 259.9,59.0 249.9,59.0" fill="#3fb573" stroke="#3fb573" stroke-width="3" stroke-linejoin="round" /><circle cx="254.938" cy="75" r="15" fill="url(#klight71)" stroke="#6f6f69" stroke-width="3" stroke-dasharray="2.2 2.2"/><line x1="254.938" y1="74" x2="254.938" y2="63" stroke="#3fb573" stroke-width="3.5" stroke-linecap="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><defs><radialGradient id="klight72g" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></radialGradient></defs><polygon points="245.1,52.0 250.1,59.0 240.1,59.0" fill="#6b6b66" stroke="#6b6b66" stroke-width="3" stroke-linejoin="round" /><circle cx="245.08" cy="75" r="15" fill="url(#klight72g)" stroke="#6f6f69" stroke-width="3" stroke-dasharray="2.2 2.2"/><line x1="245.08" y1="74" x2="245.08" y2="63" stroke="#6b6b66" stroke-width="3.5" stroke-linecap="round"/></g>
+<defs><radialGradient id="klight72" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#f2f2ee"/><stop offset="1" stop-color="#9a9a93"/></radialGradient></defs><polygon points="187.4,52.0 192.4,59.0 182.4,59.0" fill="#3d9fe6" stroke="#3d9fe6" stroke-width="3" stroke-linejoin="round" /><circle cx="187.42000000000002" cy="75" r="15" fill="url(#klight72)" stroke="#6f6f69" stroke-width="3" stroke-dasharray="2.2 2.2"/><line x1="187.42000000000002" y1="74" x2="187.42000000000002" y2="63" stroke="#3d9fe6" stroke-width="3.5" stroke-linecap="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Small metal knob on a stalk, pointer up.</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">Realistic, but busy at ten rows.</text>
+</g>
+<g transform="translate(816,894)">
+<rect width="380" height="372" rx="14" fill="#ffffff" stroke="#d9d9d4"/>
+<text x="16" y="32" font-size="18" font-weight="700" fill="#1c1c1a">I. Double chevron</text>
+<g transform="translate(0,46)">
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Hi-Hat</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="115.3" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="193.0" y="39" width="22.3" height="10" rx="5" fill="#ec6a00"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polyline points="201.32,69 215.32,53 229.32,69" fill="none" stroke="#3d9fe6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="201.32,82 215.32,66 229.32,82" fill="none" stroke="#3d9fe6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−3.0</text>
+</g>
+<g transform="translate(0,138)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Ride</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="193.0" y="39" width="61.9" height="10" fill="#3fb573"/>
+<rect x="230.2" y="39" width="24.7" height="10" rx="5" fill="#ec6a00"/>
+<rect x="192.0" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<polyline points="240.938,69 254.938,53 268.938,69" fill="none" stroke="#3fb573" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="240.938,82 254.938,66 268.938,82" fill="none" stroke="#3fb573" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">R20</text>
+</g>
+<g transform="translate(0,230)">
+<line x1="0" x2="380" y1="0" y2="0" stroke="#d9d9d4"/>
+<text x="14" y="49" font-size="15" font-weight="650" fill="#1c1c1a">Kick</text>
+<rect x="100" y="39" width="186" height="10" rx="5" fill="#d6d6cf"/>
+<rect x="100" y="39" width="87.4" height="10" rx="5" fill="#3d9fe6"/>
+<rect x="247.8" y="35" width="2" height="18" rx="1" fill="#6b6b66" opacity=".55"/>
+<g opacity=".35" filter="url(#grey)"><polyline points="231.08,69 245.08,53 259.08000000000004,69" fill="none" stroke="#6b6b66" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="231.08,82 245.08,66 259.08000000000004,82" fill="none" stroke="#6b6b66" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>
+<polyline points="173.42000000000002,69 187.42000000000002,53 201.42000000000002,69" fill="none" stroke="#3d9fe6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="173.42000000000002,82 187.42000000000002,66 201.42000000000002,82" fill="none" stroke="#3d9fe6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="366" y="51" font-size="20" font-weight="650" text-anchor="end" fill="#1c1c1a" style="font-variant-numeric:tabular-nums">−9.0</text>
+</g>
+<line x1="0" x2="380" y1="318" y2="318" stroke="#d9d9d4"/>
+<text x="16" y="332" font-size="13.5" fill="#6b6b66">Two stacked arrowheads below the track.</text>
+<text x="16" y="352" font-size="13.5" fill="#6b6b66">Light; reads as "grab and slide".</text>
+</g>
+</svg>
