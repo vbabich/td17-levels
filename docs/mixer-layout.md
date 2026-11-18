@@ -1,5 +1,7 @@
 # TD-17 mixer: layout proposal
 
+Status: all eight layout decisions answered on 2026-11-17 (see the end). The working app is not built yet.
+
 Mockup: [`mixer-mockup.html`](../mixer-mockup.html), live at https://vbabich.github.io/td17-levels/mixer-mockup.html
 
 The mockup is a static page with fake data. It does not use Bluetooth and does not touch the tester or `td17.js`. The dashed purple **Mockup** button (top right) is not part of the app: it switches layout, connection state and theme, and pretends the module changed kit or had a knob turned.
@@ -32,7 +34,7 @@ The Strips layout is in the mockup too (Mockup → Layout → Strips): 5 x 2 in 
 | Level | Light blue fader, value in large digits. The scale is not linear: -12 to +6 dB takes half the travel, with a tick at 0 dB. Far left is -INF. |
 | Pan | The **Level / Pan** switch turns all ten faders into pan faders: light green, filled outward from a centre tick, values like L8, C, R12. Pan is also in each pad's own view. |
 | Individual values | Tap a pad's name. A full-screen view opens with the pad Level and Pan (with − and + for 0.5 dB or one pan step) and, below, every stored value by zone: Main, Sub (marked "off" when off), Pan, then Pedal HH or XStick. **Done** or the phone's Back button closes it. In landscape the two halves sit side by side. |
-| Discrepancy | Three orange signs on the pad's fader: a bar under the track from the lowest to the highest disagreeing value (never hidden by the thumb), a ring around the thumb, and a small flag above the pad name. Same rules as the tester. Inside the pad view an orange note says what disagrees in words, for example "Pedal HH is 6.5 dB below the pad level". Fake kit 12 has it on Snare, Hi-Hat and Ride (Level) and Ride (Pan). |
+| Discrepancy | An orange bar drawn over the blue track from the lowest to the highest disagreeing value, with a small orange triangle above each end pointing down at it. The triangles sit clear of the thumb, so a narrow spread hidden under the thumb is still visible. Same rules as the tester. Inside the pad view an orange note says what disagrees in words, for example "Pedal HH is 6.5 dB below the pad level". Fake kit 12 has it on Snare, Hi-Hat and Ride (Level) and Ride (Pan). |
 | Kit and kit change | Kit number and name in the top bar. On a kit change the name becomes "Loading 3/10…", a progress line runs under the bar, and each row is greyed out until its pad has been read. |
 | Connection | Disconnected: a single large Connect button with the module instructions. Connecting: the button says so. Connected: green dot (tap it to disconnect). Reconnecting: the last known values stay visible but dimmed and locked, under an orange banner with the attempt count and a Stop button. |
 | Edits from the module | The fader moves and the row is highlighted for a moment. |
@@ -46,19 +48,19 @@ The Strips layout is in the mockup too (Mockup → Layout → Strips): 5 x 2 in 
 - **Jump-to-touch faders** (the fader goes where you tap): one stray stick or sleeve changes the stored kit. Rejected.
 - **A pan control on every row:** halves the room for the level fader for something adjusted rarely. Replaced by the Level/Pan switch.
 - **Details expanding inside the row:** the other pads move around and up to eleven values do not fit. A full-screen pad view is calmer.
-- **Painting the orange band on the track itself** (as in the tester): a narrow band hides under the thumb. Moved to just outside the thumb.
+- **Orange bar below the track, a ring on the thumb, a flag on the pad name** (the first mockup): replaced at your request by the bar over the track plus triangle markers.
 - **Two-line rows** (name and value above a full-width fader): about 60% more fader travel in portrait, but the name becomes a small tap target and the fader reaches into the back-gesture edge. Worth revisiting only if the faders feel too coarse on the phone.
 - **Kit master volume as an eleventh fader:** left out to keep exactly ten equal rows. See decision 6.
 
-## Decisions for you
+## Decisions (answered 2026-11-17)
 
-1. ~~**Rows or Strips?**~~ **Decided 2026-11-17: Rows.** Strips stays in the mockup only for reference and will not be built.
-2. **Relative grab.** Is "nothing happens until you drag, and you can drag from anywhere on the row" right, or do you want the fader to respond only when the thumb itself is grabbed?
-3. **Fader scale.** Keep the stretched scale (more travel between -12 and +6 dB), or linear as in the tester?
-4. **Pan by switch.** Is a Level/Pan switch for the whole screen acceptable, or should pan live only inside each pad's view?
-5. **Getting back.** Compare plus Restore as shown, or Restore alone? Note that Compare on the real module means writing the changed values back and forth, about a second for a few pads. Also: should the "first read" values survive closing the page (so Restore still works the next day), or reset each session?
-6. **Kit volume.** Add the kit master volume (as an eleventh row or in the top bar), or leave it on the module?
-7. **Discrepancy signs.** Are bar, ring and flag together too much? Any one could go.
-8. **Install as an app.** Adding the page to the home screen would give full screen (taller rows, no browser bars) and lets it keep the screen awake. Wanted?
+1. **Layout:** Rows. Strips stays in the mockup only for reference and will not be built.
+2. **Grab:** anywhere on the row. Nothing changes until a drag of 8 px along the fader; then the value follows the finger from where it was.
+3. **Fader scale:** stretched (-12 to +6 dB takes half the travel, tick at 0 dB).
+4. **Pan:** the Level/Pan switch for the whole screen, and also in each pad's view.
+5. **Getting back:** Compare plus Restore (plus Restore pad). The original values are what was read when you connected and are not kept after the page is closed.
+6. **Kit volume:** left on the module; the app shows ten pad rows only.
+7. **Discrepancy signs:** orange bar over the blue track, with triangle markers above each end pointing at it. No ring on the thumb, no flag on the name.
+8. **Install as an app:** yes. Installable to the home screen (manifest and icon), full screen, keeps the screen awake.
 
-Smaller things I chose without asking, easy to change: cymbal zones are labelled Bow/Edge/Bell (the tester says Head/Rim); the − and + step is 0.5 dB; an edit made on the module counts as a change for Compare and Restore; opening a pad is by its name only, not by tapping the value.
+Smaller things chosen without asking, still easy to change: cymbal zones are labelled Bow/Edge/Bell (the tester says Head/Rim); the − and + step is 0.5 dB; an edit made on the module counts as a change for Compare and Restore; opening a pad is by its name only, not by tapping the value.
