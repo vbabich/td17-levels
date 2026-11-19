@@ -159,3 +159,99 @@ test('the simulator answers like the module', async () => {
   assert.deepEqual(got[1], [0xc9, 4]);
   assert.equal(sim.kit, 4);
 });
+
+// ---------- recording and replay ----------
+test('BLE short message packet: header, timestamp, then the message', () => {
+  assert.deepEqual(core.bleEncodeShort([0x99, 38, 100], 0), [0x80, 0x80, 0x99, 38, 100]);
+  assert.deepEqual(core.bleEncodeShort([0x89, 38, 0], 1000), [0x80 | (1000 >> 7), 0x80 | (1000 & 0x7f), 0x89, 38, 0]);
+  assert.deepEqual(core.bleEncodeShort([0xb9, 4, 64], 8192 + 5), [0x80, 0x85, 0xb9, 4, 64]); // 13-bit wrap
+});
+
+test('seeded fill uses every pad except Aux, never Aux, and lasts 5-8 s', () => {
+  const fill = core.seedFill();
+  const pads = new Set(fill.events.map((e) => core.padOfNote(e.n)));
+  assert.deepEqual([...pads].sort(), ['Crash 1', 'Crash 2', 'Hi-Hat', 'Kick', 'Ride', 'Snare', 'Tom 1', 'Tom 2', 'Tom 3']);
+  assert.ok(!pads.has('Aux') && !pads.has(null));
+  const ms = core.recordingMs(fill);
+  assert.ok(ms >= 5000 && ms <= 8000, `fill lasts ${ms} ms`);
+  assert.ok(core.recordingMs(core.seedBaDumTss()) < 2000);
+  for (const s of core.seedRecordings()) assert.ok(core.sanitizeRecording(s));
+});
+
+test('recorder: trims to the first note, keeps the pedal position, ignores Note On with velocity 0', () => {
+  let t = 1000;
+  const r = core.createRecorder(() => t);
+  assert.equal(r.finish(), null);
+  t = 1100; r.pedal(90);
+  t = 1500; r.note(9, 38, 100);
+  t = 1600; r.note(9, 38, 0);
+  t = 1700; r.pedal(10);
+  t = 1800; r.note(9, 42, 80);
+  assert.deepEqual(r.finish(), { channel: 9, events: [{ t: 0, cc: 4, v: 90 }, { t: 0, n: 38, v: 100 }, { t: 200, cc: 4, v: 10 }, { t: 300, n: 42, v: 80 }] });
+  assert.equal(core.createRecorder(() => 0).finish(), null);
+});
+
+test('playback messages: matching Note Offs, pedal before notes, retriggers cut the earlier note', () => {
+  const msgs = core.playbackMessages({ channel: 9, events: [{ t: 0, cc: 4, v: 5 }, { t: 0, n: 42, v: 80 }, { t: 20, n: 42, v: 90 }, { t: 500, n: 38, v: 100 }] });
+  assert.deepEqual(msgs.map((m) => m.bytes), [
+    [0xb9, 4, 5], [0x99, 42, 80], [0x89, 42, 0], [0x99, 42, 90], [0x89, 42, 0], [0x99, 38, 100], [0x89, 38, 0],
+  ]);
+  assert.equal(msgs[2].t, 20);
+  assert.equal(msgs[4].t, 20 + core.NOTE_MS);
+  const ons = msgs.filter((m) => m.bytes[0] >> 4 === 9).length, offs = msgs.filter((m) => m.bytes[0] >> 4 === 8).length;
+  assert.equal(ons, offs);
+  assert.equal(core.playbackMessages({ channel: 3, events: [{ t: 0, n: 38, v: 1 }] })[0].bytes[0], 0x93); // replays on the recorded channel
+});
+
+test('player sends on time, and stop silences sounding notes and cancels the rest', () => {
+  let clock = 0, timers = [];
+  const sent = [];
+  const player = core.createPlayer({
+    send: (b) => sent.push([clock, ...b]), now: () => clock,
+    setTimer: (fn) => timers.push(fn) && timers.length, clearTimer: () => { timers = []; },
+  });
+  const run = (ms) => { const end = clock + ms; while (clock < end) { clock += 5; const f = timers.shift(); timers = []; f?.(); } };
+  player.play(core.playbackMessages({ channel: 9, events: [{ t: 0, n: 36, v: 100 }, { t: 40, n: 38, v: 100 }, { t: 1000, n: 49, v: 100 }] }));
+  assert.ok(player.playing);
+  run(30);
+  assert.deepEqual(sent.map((s) => s.slice(1)), [[0x99, 36, 100]]);
+  run(20); // 50 ms: snare on, kick off at 60 not yet
+  assert.ok(sent.some((s) => s[2] === 38 && s[1] === 0x99 && s[0] <= 45));
+  player.stop();
+  assert.ok(!player.playing);
+  const open = new Set();
+  for (const s of sent) (s[1] >> 4 === 9 ? open.add(s[2]) : open.delete(s[2]));
+  assert.equal(open.size, 0); // nothing hanging
+  const n = sent.length; run(2000);
+  assert.equal(sent.length, n); // the crash at 1000 ms never sounds
+  player.play(core.playbackMessages({ channel: 9, events: [{ t: 0, n: 36, v: 100 }] }));
+  run(200);
+  assert.ok(!player.playing); // ends by itself
+});
+
+test('quick press: newest if made after the last playback began, else the last played', () => {
+  const recs = [{ id: 'a', created: 1 }, { id: 'b', created: 5 }, { id: 'c', created: 9 }];
+  assert.equal(core.pickQuick(recs, null).id, 'c');
+  assert.equal(core.pickQuick(recs, { id: 'a', at: 10 }).id, 'a');
+  assert.equal(core.pickQuick(recs, { id: 'a', at: 8 }).id, 'c');
+  assert.equal(core.pickQuick(recs, { id: 'gone', at: 100 }).id, 'c');
+  assert.equal(core.pickQuick([], null), null);
+});
+
+test('stored recordings are validated', () => {
+  const good = { id: 'r1', name: 'x', created: 5, channel: 9, events: [{ t: 0, n: 38, v: 90 }, { t: 5, cc: 4, v: 3 }] };
+  assert.deepEqual(core.sanitizeRecording(JSON.parse(JSON.stringify(good))), good);
+  assert.equal(core.sanitizeRecording({ ...good, events: [{ t: 0, n: 300, v: 1 }] }), null);
+  assert.equal(core.sanitizeRecording({ ...good, events: [] }), null);
+  assert.equal(core.sanitizeRecording(null), null);
+  assert.equal(core.sanitizeRecording({ ...good, channel: 40 }).channel, 9);
+});
+
+test('sim module logs short messages and can play notes into the app', () => {
+  const sent = [], got = [];
+  const m = createSimModule({ emit: (x) => got.push(x), latency: 0, onShort: (b) => sent.push(b) });
+  m.receiveShort([0x99, 38, 100]);
+  assert.deepEqual(sent, [[0x99, 38, 100]]);
+  m.hit(38, 90); m.pedal(20);
+  return sleep(10).then(() => assert.deepEqual(got, [[0x99, 38, 90], [0xb9, 4, 20]]));
+});

@@ -11,7 +11,7 @@ const KIT_12 = [
   [INF, 0], [INF, 0],
 ];
 
-export function createSimModule({ emit, latency = 15 }) {
+export function createSimModule({ emit, latency = 15, onShort = () => {} }) {
   const memory = new Map();
   const key = (a, i) => ((a[0] << 21) | (a[1] << 14) | (a[2] << 7) | a[3]) + i;
   const poke = (addr, bytes) => bytes.forEach((b, i) => memory.set(key(addr, i), b));
@@ -54,6 +54,11 @@ export function createSimModule({ emit, latency = 15 }) {
       const d = td.parseDt1(bytes);
       if (d?.checksumOk) poke(addr, d.data);
     },
+    // A short message (Note On, Note Off, CC) sent by the app: the module would sound it.
+    receiveShort(bytes) { onShort([...bytes]); },
+    // The drummer hits a pad or moves the hi-hat pedal (channel 10 unless told otherwise).
+    hit(note, velocity = 100, ch = 9) { reply([0x90 | ch, note, velocity]); },
+    pedal(value, ch = 9) { reply([0xb0 | ch, 4, value]); },
     // Kit selected on the module, announced as a Program Change or as the kit-number DT1.
     selectKit(kit, how = 'pc') {
       poke(td.address.currentKit(), [kit]);

@@ -76,3 +76,7 @@ Smaller things chosen without asking, still easy to change: cymbal zones are lab
 - The blue fill and the orange bar are square where they end inside the range and rounded only where they meet the ends of the range.
 - In the pad view a slider also snaps to the current values of related sliders on the same pad: a level to the other mains, to subs that are on, and to Pedal HH or XStick; a pan to the other zones' pans.
 - Precision mode: press and hold a fader for 1 second without moving. The tab gets a ring, the value takes the fader's colour, and from then on every 6 px of movement is one step (0.1 dB or one pan step), with no snapping, until you let go.
+
+## Record and Replay (2026-11-18)
+
+Two icon buttons at the right of the top row: Record (red circle, tap to start, tap to stop) and Play (green triangle; a quick press plays the newest recording if one was made after the last playback began, else the last one played; a long press lists the recordings, newest first, and tapping one plays it at once). While playing, Play shows Stop. Recordings are Note On plus hi-hat pedal (CC 4), kept in localStorage on the phone; two seeded items ("Ba-dum-tss" and a 7 s drum fill over every pad except Aux) are always present. Note numbers are the TD-17 factory defaults and have not been checked against Roland's note map table.

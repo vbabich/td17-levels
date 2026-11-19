@@ -165,3 +165,181 @@ export function moduleEdits(model, dt) {
   }
   return edits;
 }
+
+// ---------- recording and replaying drum notes ----------
+// Note numbers are the TD-17 factory defaults (Roland's "TD-17 Default MIDI Note Map" could not be
+// fetched when this was written, so they are the usual Roland defaults, not checked against it).
+// They can be edited on the module; the seeded recordings depend on them being unchanged.
+export const NOTE_MAP = {
+  'Kick': [36],
+  'Snare': [38, 40, 37],
+  'Tom 1': [48, 50],
+  'Tom 2': [45, 47],
+  'Tom 3': [43, 58],
+  'Hi-Hat': [42, 46, 44],
+  'Crash 1': [49, 55],
+  'Crash 2': [57, 52],
+  'Ride': [51, 59, 53],
+  'Aux': [27, 28],
+};
+export const padOfNote = (note) => Object.keys(NOTE_MAP).find((p) => NOTE_MAP[p].includes(note)) ?? null;
+
+export const HAT_CC = 4;          // hi-hat control pedal position
+export const DRUM_CHANNEL = 9;    // MIDI channel 10, zero-based
+export const NOTE_MS = 60;        // replayed notes are held this long
+export const MAX_EVENTS = 4000;   // one recording stops itself here
+export const MAX_SAVED = 30;      // user recordings kept on the phone
+
+// One short channel message (Note On, Note Off, CC) as a BLE-MIDI packet.
+export function bleEncodeShort(msg, timestampMs = 0) {
+  const ts = Math.floor(timestampMs) & 0x1fff;
+  return [0x80 | (ts >> 7), 0x80 | (ts & 0x7f), ...msg];
+}
+
+// A recording: { id, name, created, channel, events }, events sorted by t (ms from the first
+// note): { t, n, v } is a Note On, { t, cc, v } a controller change (the hi-hat pedal).
+export function createRecorder(now) {
+  const t0 = now();
+  const events = [];
+  let channel = null;
+  const rec = {
+    get count() { return events.length; },
+    get full() { return events.length >= MAX_EVENTS; },
+    note(ch, n, v) {
+      if (!v || rec.full) return;
+      channel ??= ch;
+      events.push({ t: now() - t0, n, v });
+    },
+    pedal(v) { if (!rec.full) events.push({ t: now() - t0, cc: HAT_CC, v }); },
+    // Events from the first note on (the last pedal position before it is kept at 0), or null.
+    finish() {
+      const first = events.find((e) => e.n != null);
+      if (!first) return null;
+      const lead = events.filter((e) => e.cc != null && e.t < first.t).pop();
+      const out = events.filter((e) => e.t >= first.t).map((e) => ({ ...e, t: Math.round(e.t - first.t) }));
+      if (lead) out.unshift({ t: 0, cc: lead.cc, v: lead.v });
+      return { channel: channel ?? DRUM_CHANNEL, events: out };
+    },
+  };
+  return rec;
+}
+
+export const recordingMs = (rec) => (rec.events.length ? rec.events[rec.events.length - 1].t + NOTE_MS : 0);
+
+const pad2 = (n) => String(n).padStart(2, '0');
+export function recordingName(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+export function fmtDuration(ms) {
+  const s = Math.max(1, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${pad2(s % 60)}`;
+}
+
+// Timed MIDI messages for a recording: [{ t, bytes }] sorted by time. Each Note On gets its Note Off
+// NOTE_MS later (sooner when the same note is struck again). Offs come before controllers before ons.
+export function playbackMessages(rec) {
+  const ch = rec.channel ?? DRUM_CHANNEL;
+  const out = [];
+  rec.events.forEach((e, i) => {
+    if (e.cc != null) { out.push({ t: e.t, rank: 1, bytes: [0xb0 | ch, e.cc, e.v] }); return; }
+    const next = rec.events.slice(i + 1).find((x) => x.n === e.n);
+    const off = Math.max(e.t + 1, Math.min(e.t + NOTE_MS, next ? next.t : Infinity));
+    out.push({ t: e.t, rank: 2, bytes: [0x90 | ch, e.n, e.v] }, { t: off, rank: 0, bytes: [0x80 | ch, e.n, 0] });
+  });
+  return out.sort((a, b) => a.t - b.t || a.rank - b.rank).map(({ t, bytes }) => ({ t, bytes }));
+}
+
+// Plays timed messages with a look-ahead: one timer wakes every tickMs and sends whatever is due
+// within the next lookMs, so a late timer shifts a note by at most one tick and nothing is chained.
+// stop() sends a Note Off for every note still sounding.
+export function createPlayer({ send, now, setTimer = setTimeout, clearTimer = clearTimeout, tickMs = 10, lookMs = 5, onChange = () => {} }) {
+  let queue = [], i = 0, t0 = 0, timer = null, playing = false;
+  const sounding = new Set();
+  const fire = (bytes) => {
+    const [status, n] = bytes;
+    if ((status & 0xf0) === 0x90) sounding.add(`${status & 15}:${n}`);
+    else if ((status & 0xf0) === 0x80) sounding.delete(`${status & 15}:${n}`);
+    try { send(bytes); } catch { /* link gone: the app ends playback itself */ }
+  };
+  const end = () => { clearTimer(timer); timer = null; queue = []; playing = false; onChange(); };
+  const tick = () => {
+    timer = null;
+    const el = now() - t0;
+    while (i < queue.length && queue[i].t <= el + lookMs) fire(queue[i++].bytes);
+    if (i >= queue.length) end();
+    else timer = setTimer(tick, tickMs);
+  };
+  return {
+    get playing() { return playing; },
+    play(messages) {
+      if (playing) this.stop();
+      queue = messages; i = 0; t0 = now(); playing = true;
+      onChange();
+      tick();
+    },
+    stop() {
+      if (!playing) return;
+      clearTimer(timer);
+      for (const k of sounding) { const [ch, n] = k.split(':').map(Number); try { send([0x80 | ch, n, 0]); } catch { /* link gone */ } }
+      sounding.clear();
+      end();
+    },
+  };
+}
+
+// Which recording a quick press plays: the newest when one was made after the last playback began
+// (or nothing was played yet), otherwise the last one played. `last` is { id, at } or null.
+export function pickQuick(recs, last) {
+  if (!recs.length) return null;
+  const newest = recs.reduce((a, b) => (b.created > a.created ? b : a));
+  const played = last && recs.find((r) => r.id === last.id);
+  return !played || newest.created > last.at ? newest : played;
+}
+
+// Checks a recording read back from storage; returns a clean copy or null.
+export function sanitizeRecording(r) {
+  if (!r || typeof r.id !== 'string' || typeof r.name !== 'string' || !Number.isFinite(r.created) || !Array.isArray(r.events)) return null;
+  const byte = (x) => Number.isInteger(x) && x >= 0 && x <= 127;
+  const events = [];
+  for (const e of r.events.slice(0, MAX_EVENTS)) {
+    if (!e || !Number.isFinite(e.t) || e.t < 0 || !byte(e.v)) return null;
+    if (e.n != null && byte(e.n)) events.push({ t: e.t, n: e.n, v: e.v });
+    else if (e.cc != null && byte(e.cc)) events.push({ t: e.t, cc: e.cc, v: e.v });
+    else return null;
+  }
+  if (!events.some((e) => e.n != null)) return null;
+  events.sort((a, b) => a.t - b.t);
+  return { id: r.id, name: r.name.slice(0, 40), created: r.created, channel: Number.isInteger(r.channel) && r.channel >= 0 && r.channel < 16 ? r.channel : DRUM_CHANNEL, events };
+}
+
+// ---------- seeded recordings ----------
+const hit = (t, pad, v, which = 0) => ({ t: Math.round(t), n: NOTE_MAP[pad][which], v });
+
+export function seedBaDumTss() {
+  const events = [hit(0, 'Snare', 96), hit(230, 'Kick', 110), hit(520, 'Crash 1', 118), hit(520, 'Kick', 100)];
+  return { id: 'seed-ba-dum-tss', name: 'Ba-dum-tss', created: 2, seed: true, channel: DRUM_CHANNEL, events };
+}
+
+// Four bars at 138 bpm: two of groove on the hi-hat, one on the ride, then a fill round the toms.
+export function seedFill() {
+  const step = 60000 / 138 / 4; // a sixteenth
+  const ev = [];
+  const add = (s, pad, v, which) => ev.push(hit(s * step, pad, v, which));
+  add(0, 'Crash 1', 118); add(0, 'Kick', 108);
+  for (let bar = 0; bar < 2; bar++) {
+    const b = bar * 16;
+    for (let s = 0; s < 16; s += 2) add(b + s, 'Hi-Hat', s % 4 ? 70 : 88, bar === 1 && s === 14 ? 1 : 0);
+    add(b, 'Kick', 108); add(b + 8, 'Kick', 104); add(b + 10, 'Kick', 92);
+    add(b + 4, 'Snare', 104); add(b + 12, 'Snare', 108);
+  }
+  add(32, 'Crash 2', 112); add(32, 'Kick', 108);
+  for (let s = 32; s < 48; s += 2) add(s, 'Ride', s % 4 ? 72 : 90);
+  add(40, 'Kick', 104); add(36, 'Snare', 104); add(44, 'Snare', 108);
+  for (let s = 48; s < 56; s++) add(s, 'Snare', 70 + (s - 48) * 5);
+  [['Tom 1', 56], ['Tom 1', 57], ['Tom 2', 58], ['Tom 2', 59], ['Tom 3', 60], ['Tom 3', 61]].forEach(([p, s], k) => add(s, p, 100 + k * 3));
+  add(62, 'Kick', 110); add(63, 'Snare', 112);
+  add(64, 'Crash 1', 124); add(64, 'Kick', 118); add(64, 'Crash 2', 118);
+  ev.sort((a, b) => a.t - b.t);
+  return { id: 'seed-fill', name: 'Drum fill', created: 1, seed: true, channel: DRUM_CHANNEL, events: ev };
+}
+export const seedRecordings = () => [seedBaDumTss(), seedFill()];

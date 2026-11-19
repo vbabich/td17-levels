@@ -1,7 +1,7 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=1';
-import { createSimModule } from './mixer-sim.js?v=1';
+import * as core from './mixer-core.js?v=2';
+import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
 const $ = (id) => document.getElementById(id);
@@ -120,6 +120,12 @@ function onMidi(msg) {
       w.resolve(r);
       solicited = true;
     }
+  }
+  if (recorder) { // the drummer's notes and hi-hat pedal
+    const type = msg[0] & 0xf0;
+    if (type === 0x90 && msg[2] > 0) recorder.note(msg[0] & 15, msg[1], msg[2]);
+    else if (type === 0xb0 && msg[1] === core.HAT_CC) recorder.pedal(msg[2]);
+    if (recorder.full) stopRecording();
   }
   if ((msg[0] & 0xf0) === 0xc0) { kitSignal(null); return; } // Program Change: the kit was switched
   if (msg[0] !== 0xf0 || solicited) return;
@@ -426,6 +432,127 @@ function paramControl(i, p) {
   };
 }
 
+
+// ---------- record and replay ----------
+const RECS_KEY = 'td17-mixer-recordings';
+const LAST_KEY = 'td17-mixer-last-played';
+const LONG_PRESS_MS = 500;
+let recorder = null;       // while recording
+let userRecs = [];         // recorded on this phone
+let lastPlayed = null;     // { id, at }
+let playingId = null;
+try {
+  userRecs = (JSON.parse(localStorage.getItem(RECS_KEY) ?? '[]') ?? []).map(core.sanitizeRecording).filter(Boolean);
+  const l = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null');
+  if (l && typeof l.id === 'string' && Number.isFinite(l.at)) lastPlayed = l;
+} catch { /* storage unavailable or damaged: start with the seeds only */ }
+const allRecs = () => [...core.seedRecordings(), ...userRecs].sort((a, b) => b.created - a.created);
+function saveRecs() {
+  try {
+    localStorage.setItem(RECS_KEY, JSON.stringify(userRecs));
+    localStorage.setItem(LAST_KEY, JSON.stringify(lastPlayed));
+  } catch (e) { console.warn('Could not save recordings:', e.message); }
+}
+
+const player = core.createPlayer({
+  send: (bytes) => { transport?.sendShort(bytes)?.catch?.(() => {}); },
+  now: () => performance.now(),
+  onChange: () => { if (!player.playing) playingId = null; repaintRecPlay(); },
+});
+
+let toastTimer = 0;
+function toast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+}
+
+function repaintRecPlay() {
+  const ready = S.conn === 'connected' && S.loaded >= core.PAD_COUNT;
+  const rec = $('rec'), play = $('play'), playing = player.playing;
+  rec.dataset.state = recorder ? 'on' : 'off';
+  rec.disabled = !ready && !recorder;
+  rec.setAttribute('aria-label', recorder ? 'Stop recording' : 'Record');
+  play.dataset.state = playing ? 'on' : 'off';
+  play.disabled = Boolean(recorder) || (!ready && !playing);
+  play.setAttribute('aria-label', playing ? 'Stop' : 'Play');
+}
+
+function playRecording(rec) {
+  if (!transport || recorder) return;
+  closeMenu();
+  playingId = rec.id;
+  lastPlayed = { id: rec.id, at: Date.now() };
+  saveRecs();
+  player.play(core.playbackMessages(rec));
+  if (playingId !== rec.id && !player.playing) playingId = null;
+}
+function stopPlayback() { player.stop(); }
+
+function startRecording() {
+  if (recorder || !transport) return;
+  stopPlayback();
+  closeMenu();
+  recorder = core.createRecorder(() => performance.now());
+  repaintRecPlay();
+}
+function stopRecording() {
+  if (!recorder) return;
+  const done = recorder.finish();
+  recorder = null;
+  if (done) {
+    const created = Date.now();
+    const rec = { id: `r${created}`, name: core.recordingName(new Date(created)), created, ...done };
+    userRecs = [rec, ...userRecs].slice(0, core.MAX_SAVED);
+    saveRecs();
+    toast(`Saved ${rec.name} (${core.fmtDuration(core.recordingMs(rec))})`);
+  } else toast('Nothing recorded');
+  repaintRecPlay();
+}
+$('rec').onclick = () => (recorder ? stopRecording() : startRecording());
+
+// Play: a quick press plays (or stops); a long press lists the recordings.
+const menu = $('menu');
+function closeMenu() { menu.hidden = true; }
+function openMenu() {
+  menu.replaceChildren(...allRecs().map((r) => {
+    const b = h('button'), name = h('span', '', r.name), dur = h('small', '', core.fmtDuration(core.recordingMs(r)));
+    b.setAttribute('role', 'menuitem');
+    b.append(name, dur);
+    b.onclick = () => playRecording(r);
+    return b;
+  }));
+  const r = $('play').getBoundingClientRect();
+  menu.style.top = `${r.bottom + 4}px`;
+  menu.style.right = `${Math.max(10, document.documentElement.clientWidth - r.right)}px`;
+  menu.style.maxHeight = `${Math.max(120, window.innerHeight - r.bottom - 16)}px`;
+  menu.hidden = false;
+}
+{
+  const btn = $('play');
+  let holdTimer = 0, swallow = false;
+  btn.addEventListener('pointerdown', () => {
+    swallow = !menu.hidden; // a press that only closes the menu does nothing else
+    clearTimeout(holdTimer);
+    if (swallow) { closeMenu(); return; }
+    holdTimer = setTimeout(() => { swallow = true; openMenu(); buzz(20); }, LONG_PRESS_MS);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) btn.addEventListener(ev, () => clearTimeout(holdTimer));
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  btn.addEventListener('click', (e) => {
+    if (swallow) { swallow = false; return; }
+    if (player.playing) { stopPlayback(); return; }
+    const rec = core.pickQuick(allRecs(), lastPlayed);
+    if (rec) playRecording(rec);
+  });
+  btn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ContextMenu') { e.preventDefault(); openMenu(); menu.firstChild?.focus(); } });
+  document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target) && e.target.closest?.('#play') == null) closeMenu(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  window.addEventListener('resize', closeMenu);
+}
+
 // ---------- main screen ----------
 const padEls = [];
 function setValue(out, kind, v) {
@@ -498,6 +625,7 @@ function repaint() {
   else $('banner').hidden = true;
 
   if (S.open != null) paintSheet();
+  repaintRecPlay();
 }
 
 // ---------- one pad opened: pad Level and Pan, why it is orange, then every stored value ----------
@@ -707,14 +835,23 @@ function bleLink() {
         }
       }
       const canSkipResponse = ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse;
-      return {
-        async send(bytes) {
-          for (const packet of td.bleEncodeSysex(bytes, performance.now())) {
+      // Every write goes through one queue, one whole message at a time: notes can slip in between
+      // two SysEx messages (and the 20 ms gap after each) but never inside a multi-packet one.
+      let writes = Promise.resolve();
+      const enqueue = (packets) => {
+        const job = writes.then(async () => {
+          for (const packet of packets) {
             const data = Uint8Array.from(packet);
             if (canSkipResponse) await ch.writeValueWithoutResponse(data);
             else await ch.writeValue(data);
           }
-        },
+        });
+        writes = job.catch(() => {});
+        return job;
+      };
+      return {
+        send: (bytes) => enqueue(td.bleEncodeSysex(bytes, performance.now())),
+        sendShort: (bytes) => enqueue([core.bleEncodeShort(bytes, performance.now())]),
       };
     },
     async close() {
@@ -728,7 +865,7 @@ function bleLink() {
 }
 
 function simLink() {
-  const module = createSimModule({ emit: (msg) => { if (up) onMidi(msg); } });
+  const module = createSimModule({ emit: (msg) => { if (up) onMidi(msg); }, onShort: (b) => simLogShort(b) });
   let up = false, failures = 0;
   const link = {
     reloadAfterClose: false,
@@ -738,7 +875,10 @@ function simLink() {
       await sleep(500);
       if (failures > 0) { failures--; throw new Error('Simulated module is out of reach'); }
       up = true;
-      return { async send(bytes) { if (up) module.receive(bytes); } };
+      return {
+        async send(bytes) { if (up) module.receive(bytes); },
+        async sendShort(bytes) { if (up) module.receiveShort(bytes); },
+      };
     },
     async close() { up = false; },
     drop(failNext = 0) { failures = failNext; up = false; onLinkLost(); },
@@ -771,6 +911,8 @@ function setConn(state) {
 
 function dropTransport() {
   transport = null;
+  stopRecording();
+  stopPlayback();
   loadSeq++;
   confirmEpoch++;
   confirmSet.clear();
@@ -874,6 +1016,15 @@ $('conn').onclick = async () => {
 };
 
 // ---------- simulator controls (only with ?sim) ----------
+const simSent = []; // every short message the app sent to the simulated module
+function simLogShort(b) {
+  simSent.push({ at: Math.round(performance.now()), bytes: b });
+  const log = $('simLog'), type = b[0] & 0xf0;
+  const what = type === 0x90 ? `on  ${b[1]} ${core.padOfNote(b[1]) ?? '?'} v${b[2]}` : type === 0x80 ? `off ${b[1]}` : `cc${b[1]}=${b[2]}`;
+  log.hidden = false;
+  log.dataset.lines = [...(log.dataset.lines ? log.dataset.lines.split('|') : []), `ch${(b[0] & 15) + 1} ${what}`].slice(-4).join('|');
+  log.textContent = `sent ${simSent.length}\n${log.dataset.lines.split('|').join('\n')}`;
+}
 function buildSimPanel() {
   const panel = $('simPanel'), m = link.module;
   $('simBtn').hidden = false;
@@ -897,6 +1048,11 @@ function buildSimPanel() {
       const sub = core.createKit(m.kit).pads[1].zones[0].sub;
       m.edit(sub.switchAddr, [m.peek(sub.switchAddr, 1)[0] ? 0 : 1]);
     },
+    'Drummer hits the snare': () => m.hit(38, 100),
+    'Drummer plays a phrase (2 s)': () => {
+      [[0, 36, 110], [250, 42, 80], [500, 38, 105], [750, 42, 75], [1000, 36, 110], [1250, 46, 85], [1500, 38, 105], [1750, 49, 120]]
+        .forEach(([t, n, v]) => setTimeout(() => { if (n === 46) m.pedal(5); if (n === 42) m.pedal(120); m.hit(n, v); }, t));
+    },
     'Link drops, comes back': () => link.drop(1),
     'Link drops for good': () => link.drop(99),
     'Theme: dark': () => { document.documentElement.dataset.theme = 'dark'; },
@@ -906,7 +1062,7 @@ function buildSimPanel() {
   for (const [label, fn] of Object.entries(actions)) {
     $('simOpts').append(Object.assign(h('button', '', label), { onclick: () => { panel.close(); fn(); } }));
   }
-  window.sim = { link, module: m, state: S };
+  window.sim = { link, module: m, state: S, sent: simSent };
 }
 
 // ---------- start ----------
