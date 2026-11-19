@@ -226,6 +226,7 @@
   #connect p { margin:0; color:var(--muted); max-width:30em; font-size:15px; }
   #connect #connectMsg { color:var(--bad); font-weight:600; min-height:1.3em; }
   #connect button { min-height:60px; font-size:19px; padding:0 28px; }
+  #connect .secondary { min-height:48px; font-size:16px; padding:0 20px; }
   #connect .link { min-height:44px; font-size:14px; padding:0 12px; background:transparent; border:0; color:var(--muted); text-decoration:underline; }
 
   /* ---------- one pad opened ---------- */
@@ -304,6 +305,8 @@
   <h1>TD-17 mixer</h1>
   <button class="primary" id="connectBtn">Connect via Bluetooth</button>
   <p>On the module: SETUP → Bluetooth → Bluetooth MIDI on. Connect from here, not from the phone's Bluetooth settings.</p>
+  <button class="secondary" id="usbBtn">Connect via USB</button>
+  <p>USB: plug the phone into the module's USB port (USB-C to USB-B cable), then connect. No pairing, and tighter timing.</p>
   <p id="connectMsg" role="status"></p>
   <button id="reloadBtn" class="link">Reload app</button>
 </section>
@@ -358,6 +361,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=35"></script>
+<script type="module" src="mixer.js?v=36"></script>
 </body>
 </html>

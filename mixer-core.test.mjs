@@ -414,3 +414,20 @@ test('retryUntil waits out a slow success but gives up after the window', async 
   await assert.rejects(core.retryUntil(okAfter(1000), { windowMs: 15000, sleep, now: () => clock, shouldStop: () => true }), /not yet/);
   assert.equal(clock, 0); // a real disconnect stops it at once
 });
+
+test('USB: finds the TD-17 ports among the others', () => {
+  const ports = (names) => names.map((n, i) => ({ id: String(i), name: n, state: 'connected' }));
+  const found = core.pickTd17Ports(ports(['Midi Through', 'TD-17']), ports(['Midi Through', 'TD-17']));
+  assert.equal(found.input.name, 'TD-17'); assert.equal(found.output.id, '1');
+  assert.equal(core.pickTd17Ports(ports(['Keyboard']), ports(['Keyboard'])), null);
+  assert.equal(core.pickTd17Ports(ports(['TD-17']), []), null); // an input alone is not enough
+  assert.equal(core.pickTd17Ports([{ name: 'TD-17', state: 'disconnected' }], ports(['TD-17'])), null);
+});
+
+test('recorder uses the message time when the source provides one', () => {
+  let t = 1000;
+  const r = core.createRecorder(() => t);
+  t = 5000; // the app was slow to look at it: the messages carry their own times
+  r.note(9, 38, 100, 1200); r.note(9, 36, 100, 1500);
+  assert.deepEqual(r.finish().events.map((e) => e.t), [0, 300]);
+});

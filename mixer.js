@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=13';
+import * as core from './mixer-core.js?v=14';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -111,7 +111,7 @@ async function readParam(p) {
 }
 
 // ---------- messages from the module ----------
-function onMidi(msg) {
+function onMidi(msg, stamp) {
   if (msg[0] >= 0xf8) return; // clock / active sensing
   let solicited = false;
   for (let i = waiters.length - 1; i >= 0; i--) {
@@ -126,8 +126,9 @@ function onMidi(msg) {
   if ((msg[0] & 0xf0) === 0x90 && msg[2] > 0) showHit(msg[1], msg[2]);
   if (recorder) { // the drummer's notes and hi-hat pedal
     const type = msg[0] & 0xf0;
-    if (type === 0x90 && msg[2] > 0) recorder.note(msg[0] & 15, msg[1], msg[2]);
-    else if (type === 0xb0 && msg[1] === core.HAT_CC) recorder.pedal(msg[2]);
+    const at = Number.isFinite(stamp) && Math.abs(stamp - performance.now()) < 1000 ? stamp : undefined; // USB messages carry their own arrival time
+    if (type === 0x90 && msg[2] > 0) recorder.note(msg[0] & 15, msg[1], msg[2], at);
+    else if (type === 0xb0 && msg[1] === core.HAT_CC) recorder.pedal(msg[2], at);
     if (recorder.full) stopRecording(true);
     else if (!recWarned && recorder.count >= core.WARN_EVENTS) { recWarned = true; toast('Recording is almost full. It will stop soon.', 6000); }
   }
@@ -918,6 +919,7 @@ function repaint() {
   $('connect').hidden = live;
   $('connText').textContent = { connected: 'Connected', connecting: S.pairing ? 'Pairing…' : 'Connecting…', reconnecting: 'Reconnecting…', disconnected: 'Not connected' }[S.conn];
   $('connectBtn').disabled = S.conn === 'connecting';
+  $('usbBtn').disabled = S.conn === 'connecting';
   $('connectBtn').textContent = S.conn === 'connecting' ? (S.pairing ? 'Waiting for pairing…' : 'Connecting…') : SIM ? 'Connect to simulator' : 'Connect via Bluetooth';
   $('connectMsg').textContent = S.message;
   $('kit').style.visibility = live ? '' : 'hidden';
@@ -1220,7 +1222,43 @@ function simLink() {
   return link;
 }
 
-const link = SIM ? simLink() : bleLink();
+// USB: Web MIDI to the module's own USB port. Timing is much tighter than over Bluetooth, and there is no pairing.
+function usbLink() {
+  let access = null, input = null, output = null, listener = null;
+  const ports = () => core.pickTd17Ports([...access.inputs.values()], [...access.outputs.values()]);
+  const detach = () => { if (input) input.onmidimessage = null; if (listener) access?.removeEventListener('statechange', listener); listener = null; };
+  return {
+    reloadAfterClose: false,
+    async prepare() {
+      if (!navigator.requestMIDIAccess) throw new Error('This browser has no Web MIDI. Use Chrome on Android.');
+      try { access = await navigator.requestMIDIAccess({ sysex: true }); }
+      catch { throw new Error('MIDI access was not allowed. Allow it when Chrome asks.'); }
+      if (!ports()) throw new Error('No TD-17 found on USB. Plug in the cable and switch the module on.');
+    },
+    async open() {
+      const found = ports();
+      if (!found) throw new Error('The TD-17 is not connected over USB');
+      detach();
+      ({ input, output } = found);
+      await input.open();
+      await output.open();
+      input.onmidimessage = (e) => onMidi(Array.from(e.data), e.timeStamp);
+      listener = (e) => { if ((e.port.id === input.id || e.port.id === output.id) && e.port.state === 'disconnected') onLinkLost(new Error('The USB cable was unplugged')); };
+      access.addEventListener('statechange', listener);
+      return {
+        async send(bytes) { output.send(bytes); },
+        async sendShort(bytes) { output.send(bytes); },
+      };
+    },
+    async close() {
+      detach();
+      try { await input?.close(); } catch { /* already gone */ }
+      try { await output?.close(); } catch { /* already gone */ }
+    },
+  };
+}
+
+let link = SIM ? simLink() : null; // chosen when connecting
 
 // ---------- connection life cycle ----------
 let linkGen = 0;       // lets a newer attempt supersede one in flight
@@ -1260,8 +1298,10 @@ function resetSession() {
   Object.assign(S, { kit: null, model: null, loaded: 0, comparing: false, mode: S.mode });
 }
 
-async function connect() {
+async function connect(kind = 'ble') {
   S.message = '';
+  if (kind === 'usb') link = usbLink();
+  else if (!SIM) link = bleLink();
   closing = false;
   retries = 0;
   everUp = false;
@@ -1341,7 +1381,8 @@ async function closeLink(message) {
 const giveUp = (message) => closeLink(message);
 const stopLink = () => closeLink();
 
-$('connectBtn').onclick = connect;
+$('connectBtn').onclick = () => connect('ble');
+$('usbBtn').onclick = () => connect('usb');
 // A reload asks the server whether the page changed, so this picks up a new release even when the old one is cached.
 const VERSION = new URL(import.meta.url).searchParams.get('v');
 $('reloadBtn').textContent = VERSION ? `Reload app (version ${VERSION})` : 'Reload app';

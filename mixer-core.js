@@ -233,15 +233,16 @@ export function createRecorder(now) {
   const rec = {
     get count() { return events.length; },
     get full() { return events.length >= MAX_EVENTS; },
-    note(ch, n, v) {
+    // `at` is the message's own time when the source has one (USB does), else it is timed on arrival.
+    note(ch, n, v, at) {
       if (!v || rec.full) return;
       flush();
       channel ??= ch;
-      events.push({ t: now() - t0, n, v });
+      events.push({ t: (at ?? now()) - t0, n, v });
     },
-    pedal(v) {
+    pedal(v, at) {
       if (rec.full) return;
-      const t = now() - t0;
+      const t = (at ?? now()) - t0;
       if (lastPedal && v === lastPedal.v) { pending = null; return; }
       if (lastPedal && t - lastPedal.t < PEDAL_GAP_MS && Math.abs(v - lastPedal.v) < PEDAL_STEP) { pending = { t, v }; return; }
       pending = null;
@@ -522,4 +523,11 @@ export async function retryUntil(action, { windowMs, everyMs = 1000, sleep, now,
       await sleep(everyMs);
     }
   }
+}
+
+// The TD-17's MIDI ports among the ones the browser lists (USB): the first input and output named TD-17.
+export function pickTd17Ports(inputs, outputs) {
+  const ok = (p) => /TD-17/i.test(p.name ?? '') && p.state !== 'disconnected';
+  const input = inputs.find(ok), output = outputs.find(ok);
+  return input && output ? { input, output } : null;
 }
