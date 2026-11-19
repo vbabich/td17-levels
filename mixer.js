@@ -685,7 +685,7 @@ function openAdjust(li, r, chip) {
   };
   ok.textContent = '✓'; ok.setAttribute('aria-label', 'Done');
   ok.onclick = () => { savePrefs(); box.remove(); };
-  box.append(slider, out, revert, makeRowPlay(r), ok);
+  box.append(slider, out, ok, makeRowPlay(r), revert); // the ✓ sits where the MAX button was: tap it again to close
   li.append(box);
   repaintRowPlay();
   slider.focus();
