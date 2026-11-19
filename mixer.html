@@ -152,17 +152,15 @@
   .drow.hit { border-left-color:var(--level); }
   .pad { position:relative; }
   /* The velocity of the last hit: overlaid where it landed, so nothing moves. */
-  .vel { position:absolute; pointer-events:none; width:58px; display:grid; gap:2px; font-size:12px; color:var(--level); animation:velfade 1.6s ease-out forwards; }
-  .vel b { font-weight:600; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
-  .vel i { display:block; height:3px; border-radius:2px; background:var(--level); }
-  .maxv { position:absolute; pointer-events:none; width:58px; display:grid; gap:2px; font-size:12px; color:var(--muted); }
-  .maxv b { font-weight:600; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
-  .maxv i { display:block; height:3px; border-radius:2px; background:var(--muted); opacity:.7; }
-  .has-vel > .maxv { visibility:hidden; }
-  .pad > .vel, .pad > .maxv { right:12px; bottom:8px; }
+  .vm { position:absolute; pointer-events:none; width:58px; }
+  .vt { height:15px; font-size:12px; line-height:15px; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; transition:opacity .2s; }
+  .vt.now { color:var(--level); }
+  .vb { position:relative; height:6px; background:var(--track); overflow:hidden; } /* square ends */
+  .vg { position:absolute; left:0; top:0; bottom:0; width:0; background:var(--pan); }
+  .vx { position:absolute; top:0; bottom:0; width:2px; margin-left:-1px; background:var(--accent); display:none; }
+  .pad > .vm { right:12px; bottom:8px; }
   .detail-col h3 { position:relative; }
-  h3 > .vel, h3 > .maxv { text-transform:none; letter-spacing:0; right:0; top:50%; transform:translateY(-50%); }
-  @keyframes velfade { 0%, 25% { opacity:1; } 100% { opacity:0; } }
+  h3 > .vm { text-transform:none; letter-spacing:0; right:0; top:50%; transform:translateY(-50%); }
   .pad.loading { opacity:.35; }
   .pad.loading .fader { visibility:hidden; }
   .pad:has(.fader.drag) { background:var(--raise); }
@@ -338,6 +336,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=18"></script>
+<script type="module" src="mixer.js?v=20"></script>
 </body>
 </html>
