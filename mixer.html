@@ -135,13 +135,11 @@
   #compare[aria-pressed=true] { background:var(--level); border-color:var(--level); color:#06202f; font-weight:600; }
   body:not([data-conn=connected]) #tools { opacity:.35; pointer-events:none; }
 
-  @media (min-width: 441px) { #conn { width:148px; } }
   @media (orientation: landscape) {
     body { grid-template: "top tools" auto "progress progress" 3px "main main" minmax(0,1fr) / minmax(0,1fr) auto; }
     #tools { border-top:0; padding:6px 10px 6px 0; }
     #tools > button, .seg button { min-height:44px; }
     .seg { flex:none; } #tools > button { flex:none; padding:0 14px; } #compare { width:104px; }
-    #conn { width:148px; }
   }
 
   /* ---------- mixer: one column of rows in portrait, two in landscape ---------- */
@@ -357,6 +355,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=26"></script>
+<script type="module" src="mixer.js?v=27"></script>
 </body>
 </html>
