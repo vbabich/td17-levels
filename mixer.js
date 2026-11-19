@@ -1,7 +1,7 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=14';
-import { createSimModule } from './mixer-sim.js?v=2';
+import * as core from './mixer-core.js?v=15';
+import { createSimModule } from './mixer-sim.js?v=3';
 
 const { KIND, valueOf, originalOf } = core;
 const $ = (id) => document.getElementById(id);
@@ -252,6 +252,75 @@ function kitSignal(kit) {
   }, KIT_SETTLE_MS);
 }
 
+// ---------- choosing a kit ----------
+const kitNames = new Map(); // kit number -> name, read when the menu is opened (or the kit loaded)
+const kitFailed = new Set();
+let kitMenuEpoch = 0;
+const kitPanel = $('kitPanel'), kitGrid = $('kitGrid');
+const kitVisible = new Set();
+let kitObserver = null;
+
+function kitLabel(k) { const n = kitNames.get(k); return n === undefined ? ['…', true] : [n || '(unnamed)', false]; }
+function paintKitItem(k) {
+  const b = kitGrid.querySelector(`[data-kit="${k}"]`);
+  if (!b) return;
+  const [text, wait] = kitLabel(k), name = b.querySelector('b');
+  name.textContent = kitFailed.has(k) && !kitNames.has(k) ? '–' : text;
+  name.classList.toggle('wait', wait || kitFailed.has(k));
+}
+function openKitMenu() {
+  if (S.conn !== 'connected') return;
+  const epoch = ++kitMenuEpoch;
+  kitGrid.replaceChildren();
+  kitVisible.clear();
+  kitObserver?.disconnect();
+  kitObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) (e.isIntersecting ? kitVisible.add(Number(e.target.dataset.kit)) : kitVisible.delete(Number(e.target.dataset.kit)));
+  }, { root: kitGrid, rootMargin: '120px' });
+  for (let k = 0; k < core.KIT_COUNT; k++) {
+    if (k === 0) kitGrid.append(h('h3', '', 'Preset kits'));
+    if (k === core.PRESET_KITS) kitGrid.append(h('h3', '', 'User kits'));
+    const b = h('button', `kititem${core.isUserKit(k) ? ' user' : ''}${k === S.kit ? ' cur' : ''}`);
+    b.dataset.kit = k;
+    b.append(h('small', '', `KIT ${k + 1}`), h('b'));
+    b.onclick = () => { kitPanel.close(); if (k !== S.kit) selectKit(k); };
+    kitGrid.append(b);
+    kitObserver.observe(b);
+    paintKitItem(k);
+  }
+  kitPanel.showModal();
+  kitGrid.querySelector('.cur')?.scrollIntoView({ block: 'center' });
+  loadKitNames(epoch);
+}
+// Names are read one at a time, what is on screen first, and stop when the menu closes.
+async function loadKitNames(epoch) {
+  while (epoch === kitMenuEpoch && S.conn === 'connected' && transport) {
+    const k = core.nextKitToName(kitNames, kitFailed, kitVisible, S.kit ?? 0);
+    if (k == null) return;
+    try {
+      kitNames.set(k, core.parseKitName(await request(core.kitNameAddress(k), core.KIT_NAME_SIZE, 1200)));
+    } catch { kitFailed.add(k); }
+    paintKitItem(k);
+  }
+}
+kitPanel.addEventListener('close', () => { kitMenuEpoch++; kitObserver?.disconnect(); });
+kitPanel.addEventListener('click', (e) => { if (e.target === kitPanel) kitPanel.close(); });
+$('kitClose').onclick = () => kitPanel.close();
+$('kit').onclick = openKitMenu;
+$('kit').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openKitMenu(); } });
+
+// Asks the module to switch kits, then checks that it did before showing the new kit.
+async function selectKit(k) {
+  if (S.conn !== 'connected') return;
+  try {
+    await send(td.dt1(deviceId, td.address.currentKit(), [k]));
+    await sleep(150);
+    const now = (await request(td.address.currentKit(), 1))[0];
+    if (now === k) kitSignal(k);
+    else showNotice(`The module stayed on kit ${now + 1}`);
+  } catch (e) { showNotice(`Could not switch kits: ${e.message}`); }
+}
+
 // ---------- reading a kit ----------
 let loadSeq = 0;
 class Superseded extends Error {}
@@ -279,7 +348,7 @@ async function loadKit(kit = null) {
     const model = S.model;
     for (const pad of model.pads) pad.mainsRead = false;
     // The kit name is a nicety: a kit without a readable name just shows its number.
-    try { model.name = core.parseKitName(await request(core.kitNameAddress(number), core.KIT_NAME_SIZE, 800)); }
+    try { model.name = core.parseKitName(await request(core.kitNameAddress(number), core.KIT_NAME_SIZE, 800)); kitNames.set(number, model.name); }
     catch { alive(); }
     alive();
     // Stage 1: the main level of every zone, so all ten rows show a level within a second or so.

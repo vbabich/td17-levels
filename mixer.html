@@ -44,6 +44,7 @@
   @keyframes pulse { 50% { opacity:.25; } }
   #kit { flex:1; min-width:0; display:flex; align-items:baseline; gap:8px; white-space:nowrap; overflow:hidden; }
   #kit .no { font-size:13px; color:var(--muted); font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+  #kit { cursor:pointer; align-self:stretch; align-items:center; } #kit .caret { flex:none; color:var(--muted); font-size:14px; }
   #kit .name { font-size:19px; font-weight:650; overflow:hidden; text-overflow:ellipsis; }
   .rp { flex:none; width:44px; min-height:44px; padding:0; display:grid; place-items:center; touch-action:none; }
   .rp svg { width:22px; height:22px; grid-area:1/1; display:none; }
@@ -220,6 +221,21 @@
   #mixer .fader, .big .fader, .pad .name, .pad .val { padding-bottom:33px; }
   .big .ctl button { margin-bottom:33px; }
 
+  /* ---------- kit menu ---------- */
+  #kitPanel { width:min(96vw, 760px); max-width:min(96vw, 760px); padding:14px 14px 12px; }
+  #kitPanel[open] { display:flex; flex-direction:column; max-height:min(92dvh, 760px); }
+  #kitPanel .head { flex:none; display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  #kitPanel h2 { flex:1; margin:0; }
+  #kitGrid { flex:1 1 auto; min-height:96px; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; display:grid; gap:6px; grid-template-columns:repeat(auto-fill, minmax(148px, 1fr)); align-content:start; padding:2px; }
+  #kitGrid h3 { grid-column:1 / -1; margin:10px 2px 0; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  #kitGrid h3:first-child { margin-top:0; }
+  .kititem { display:grid; align-content:center; gap:1px; text-align:left; min-height:52px; padding:4px 10px; min-width:0; border-radius:10px; }
+  .kititem small { font-size:11px; color:var(--muted); font-weight:600; letter-spacing:.04em; }
+  .kititem b { font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .kititem b.wait { color:var(--muted); font-weight:400; }
+  .kititem.user { background:color-mix(in srgb, var(--level) 11%, var(--card)); border-color:color-mix(in srgb, var(--level) 35%, var(--line)); }
+  .kititem.cur { outline:2px solid var(--accent); outline-offset:-2px; }
+
   /* ---------- not connected ---------- */
   #connect { grid-area:main; display:grid; place-content:center; justify-items:center; gap:16px; padding:24px; text-align:center; }
   #connect h1 { margin:0; font-size:22px; }
@@ -284,7 +300,7 @@
 
 <header id="top">
   <button id="conn" aria-label="Connection"><i class="dot"></i><span id="connText">Not connected</span></button>
-  <div id="kit"><span class="no" id="kitNo"></span><span class="name" id="kitName"></span></div>
+  <div id="kit" role="button" tabindex="0" aria-haspopup="dialog" aria-label="Choose a kit"><span class="no" id="kitNo"></span><span class="name" id="kitName"></span><span class="caret" aria-hidden="true">▾</span></div>
   <button id="rec" class="rp" data-state="off" aria-label="Record" disabled>
     <svg viewBox="0 0 24 24" class="i-rec"><circle cx="12" cy="12" r="8"/></svg><svg viewBox="0 0 24 24" class="i-stop"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
   <button id="play" class="rp" data-state="off" aria-label="Play" aria-haspopup="menu" disabled>
@@ -337,6 +353,11 @@
   <div class="btns"><button data-no>Cancel</button><button data-yes class="primary"></button></div>
 </dialog>
 
+<dialog id="kitPanel">
+  <div class="head"><h2>Kits</h2><button id="kitClose" class="primary">Done</button></div>
+  <div id="kitGrid"></div>
+</dialog>
+
 <dialog id="recsPanel">
   <div class="head"><h2>Recordings</h2><button id="recsClose" class="primary">Done</button></div>
   <div class="stickyrow">
@@ -361,6 +382,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=36"></script>
+<script type="module" src="mixer.js?v=38"></script>
 </body>
 </html>

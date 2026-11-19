@@ -531,3 +531,17 @@ export function pickTd17Ports(inputs, outputs) {
   const input = inputs.find(ok), output = outputs.find(ok);
   return input && output ? { input, output } : null;
 }
+
+// ---------- kit menu ----------
+export const KIT_COUNT = 100;
+export const PRESET_KITS = 50; // kits 1-50 are the factory kits, 51-100 are user kits
+export const isUserKit = (kit) => kit >= PRESET_KITS;
+// The next kit whose name to read: one on screen first (lowest first), else the nearest to `current`.
+export function nextKitToName(known, failed, visible, current) {
+  const todo = (k) => !known.has(k) && !failed.has(k);
+  const seen = [...visible].filter(todo).sort((a, b) => a - b)[0];
+  if (seen != null) return seen;
+  let best = null;
+  for (let k = 0; k < KIT_COUNT; k++) if (todo(k) && (best == null || Math.abs(k - current) < Math.abs(best - current))) best = k;
+  return best;
+}

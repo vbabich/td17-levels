@@ -431,3 +431,12 @@ test('recorder uses the message time when the source provides one', () => {
   r.note(9, 38, 100, 1200); r.note(9, 36, 100, 1500);
   assert.deepEqual(r.finish().events.map((e) => e.t), [0, 300]);
 });
+
+test('kit menu: user kits and the order names are read in', () => {
+  assert.equal(core.isUserKit(49), false); assert.equal(core.isUserKit(50), true);
+  const known = new Set([10]), failed = new Set([11]);
+  assert.equal(core.nextKitToName(known, failed, new Set([42, 40]), 10), 40); // what is on screen first, lowest first
+  assert.equal(core.nextKitToName(known, failed, new Set(), 10), 9); // else the nearest to the current kit (11 failed)
+  const all = new Set([...Array(100).keys()]);
+  assert.equal(core.nextKitToName(all, new Set(), new Set([3]), 0), null);
+});

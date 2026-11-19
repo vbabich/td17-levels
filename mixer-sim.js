@@ -52,7 +52,10 @@ export function createSimModule({ emit, latency = 15, onShort = () => {} }) {
       const addr = bytes.slice(8, 12);
       if (bytes[7] === 0x11) return reply(td.dt1(0x10, addr, peek(addr, bytes[15])));
       const d = td.parseDt1(bytes);
-      if (d?.checksumOk) poke(addr, d.data);
+      if (d?.checksumOk) {
+        poke(addr, d.data);
+        if (addr.every((b) => b === 0)) reply([0xc9, d.data[0]]); // the module announces the kit change
+      }
     },
     // A short message (Note On, Note Off, CC) sent by the app: the module would sound it.
     receiveShort(bytes) { onShort([...bytes]); },
