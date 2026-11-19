@@ -499,6 +499,7 @@ function repaintRecPlay() {
   play.dataset.state = playing ? 'on' : 'off';
   play.disabled = Boolean(recorder) || (!ready && !playing);
   play.setAttribute('aria-label', playing ? 'Stop' : 'Play');
+  repaintRowPlay();
 }
 
 // The ring on Stop: how much of the recording has played.
@@ -507,7 +508,9 @@ function drawRing() {
   ringFrame = 0;
   if (!player.playing) { $('ringFill').style.strokeDashoffset = ''; return; }
   const done = Math.min(1, (performance.now() - playStart) / playMs);
-  $('ringFill').style.strokeDashoffset = String(113.1 * (1 - done));
+  const offset = String(113.1 * (1 - done));
+  $('ringFill').style.strokeDashoffset = offset;
+  for (const f of document.querySelectorAll('.rowplay[data-state=on] .ring circle + circle')) f.style.strokeDashoffset = offset;
   ringFrame = requestAnimationFrame(drawRing);
 }
 
@@ -550,14 +553,18 @@ $('rec').onclick = () => (recorder ? stopRecording() : startRecording());
 // ---------- the cog: reorder and delete the user's recordings ----------
 const panel = $('recsPanel'), list = $('recsList');
 const GRIP = '<svg viewBox="0 0 24 24"><path d="M4 7h16v2H4zm0 4h16v2H4zm0 4h16v2H4z"/></svg>';
+const RING = '<svg viewBox="0 0 44 44" class="ring"><circle cx="22" cy="22" r="18"/><circle cx="22" cy="22" r="18"/></svg>';
+const ROWPLAY = '<svg viewBox="0 0 24 24" class="i-play"><path d="M7 4.5v15l13-7.5z"/></svg><svg viewBox="0 0 24 24" class="i-stop"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>' + RING;
 const TRASH = '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
 function buildRecsList() {
   $('recsEmpty').hidden = userRecs.length > 0;
   list.replaceChildren(...userRecs.map((r) => {
-    const li = h('li'), nm = h('div', 'nm'), grip = h('button', 'grip'), del = h('button', 'del');
+    const li = h('li'), nm = h('div', 'nm'), grip = h('button', 'grip'), del = h('button', 'del'), play = h('button', 'rowplay');
     li.dataset.id = r.id;
     nm.append(h('span', '', r.name), h('small', '', core.fmtDuration(core.recordingMs(r))));
     grip.innerHTML = GRIP; grip.setAttribute('aria-label', `Move ${r.name}`);
+    play.innerHTML = ROWPLAY;
+    play.onclick = () => (player.playing && playingId === r.id ? stopPlayback() : playRecording(r));
     del.innerHTML = TRASH; del.setAttribute('aria-label', `Delete ${r.name}`);
     del.onclick = async () => {
       const yes = await ask('Delete this recording?', `${r.name} (${core.fmtDuration(core.recordingMs(r))}) will be removed from this phone. This cannot be undone.`, 'Delete');
@@ -585,9 +592,21 @@ function buildRecsList() {
       };
       grip.onpointerup = grip.onpointercancel = done;
     });
-    li.append(grip, nm, del);
+    li.append(grip, nm, play, del);
     return li;
   }));
+  repaintRowPlay();
+}
+// Play/Stop buttons in the list follow the same state as the top bar.
+function repaintRowPlay() {
+  const ready = S.conn === 'connected' && S.loaded >= core.PAD_COUNT;
+  for (const li of list.children) {
+    const b = li.querySelector('.rowplay'), on = player.playing && playingId === li.dataset.id;
+    b.dataset.state = on ? 'on' : 'off';
+    b.disabled = !on && (Boolean(recorder) || !ready);
+    b.setAttribute('aria-label', on ? 'Stop' : 'Play');
+    if (!on) b.querySelector('.ring circle + circle').style.strokeDashoffset = '';
+  }
 }
 $('cog').onclick = () => { closeMenu(); buildRecsList(); panel.showModal(); };
 $('recsClose').onclick = () => panel.close();
