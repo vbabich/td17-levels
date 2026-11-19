@@ -136,20 +136,51 @@ function onMidi(msg) {
 
 // A pad was hit on the module: lightly mark the pad row and, in the pad view, the values that hit edits.
 const hitTimers = new Map();
-let velTag = null, velTimer = 0;
+let velTag = null, velParent = null, velTimer = 0;
+const clearVel = () => { velTag?.remove(); velParent?.classList.remove('has-vel'); velTag = velParent = null; };
+
+// Sticky max velocity: the loudest hit seen per note since the box was ticked.
+let stickyMax = false;
+const maxByNote = new Map();
+function maxFor(match) {
+  let best = 0;
+  for (const [note, v] of maxByNote) { const t = core.noteTarget(note); if (t && match(t) && v > best) best = v; }
+  return best;
+}
+function putMax(parent, v) {
+  parent.querySelector(':scope > .maxv')?.remove();
+  if (!v) return;
+  const tag = h('div', 'maxv');
+  tag.append(h('b', '', `max ${v}`), h('i'));
+  tag.lastChild.style.width = `${Math.round(v / 127 * 100)}%`;
+  parent.append(tag);
+}
+// The pad rows show their loudest hit; an open pad shows it per zone, next to the zone's heading.
+function renderMax() {
+  padEls.forEach(({ pad }, i) => putMax(pad, stickyMax ? maxFor((t) => t.pad === i) : 0));
+  if (S.open == null || !sheetParts) return;
+  const pad = S.model.pads[S.open], group = td.GROUPS[S.open];
+  sheetParts.heads.forEach((head, k) => {
+    const v = k < pad.zones.length ? maxFor((t) => t.pad === S.open && !t.extra && t.zone === k) : maxFor((t) => t.pad === S.open && t.extra === group.extras[k - pad.zones.length]);
+    putMax(head, stickyMax ? v : 0);
+  });
+}
 // One readout at a time: the velocity of the last hit, fading out where it landed.
 function showVelocity(parent, vel) {
-  velTag?.remove();
+  clearVel();
+  velParent = parent;
+  parent.classList.add('has-vel'); // hides the sticky max underneath while this one fades
   velTag = h('div', 'vel');
   velTag.append(h('b', '', `vel ${vel}`), h('i'));
   velTag.lastChild.style.width = `${Math.round(vel / 127 * 100)}%`;
   parent.append(velTag);
   const mine = velTag;
   clearTimeout(velTimer);
-  velTimer = setTimeout(() => { mine.remove(); if (velTag === mine) velTag = null; }, 1600);
+  velTimer = setTimeout(() => { if (velTag === mine) clearVel(); }, 1600);
 }
 function showHit(note, vel) {
   const t = core.noteTarget(note);
+  if (t && stickyMax && vel > (maxByNote.get(note) ?? 0)) { maxByNote.set(note, vel); renderMax(); }
   if (!t || !S.model || t.pad >= S.loaded) return;
   const mark = (el) => {
     el.classList.add('hit');
@@ -158,7 +189,7 @@ function showHit(note, vel) {
   };
   mark(padEls[t.pad].pad);
   if (S.open == null) showVelocity(padEls[t.pad].pad, vel); // with a pad open the list is hidden behind it
-  if (S.open !== t.pad || !sheetParts) { if (S.open != null) velTag?.remove(); return; } // a hit on another pad clears the old readout
+  if (S.open !== t.pad || !sheetParts) { if (S.open != null) clearVel(); return; } // a hit on another pad clears the old readout
   const pad = S.model.pads[t.pad];
   const extraAt = t.extra ? pad.extras.findIndex((x) => x.addr.join() === td.address[t.extra](S.kit).join()) : -1;
   const head = sheetParts.heads[t.extra ? pad.zones.length + extraAt : t.zone];
@@ -676,6 +707,8 @@ function repaintRowPlay() {
   }
 }
 $('cog').onclick = () => { closeMenu(); buildRecsList(); panel.showModal(); };
+// Ticking (and unticking) starts a new measurement: the stored maxima are cleared.
+$('stickyMax').onchange = (e) => { stickyMax = e.target.checked; maxByNote.clear(); renderMax(); };
 $('recsClose').onclick = () => panel.close();
 panel.addEventListener('click', (e) => { if (e.target === panel) panel.close(); });
 
@@ -797,7 +830,7 @@ function repaint() {
 // ---------- one pad opened: pad Level and Pan, why it is orange, then every stored value ----------
 let sheetParts = null;
 function openSheet(i) {
-  velTag?.remove();
+  clearVel();
   S.open = i;
   dropSheetFaders();
   const pad = S.model.pads[i];
@@ -834,6 +867,7 @@ function openSheet(i) {
   $('sheetDetail').replaceChildren(...detail);
 
   sheetParts = { level, pan, why, rows, heads };
+  renderMax();
   $('sheet').hidden = false;
   $('sheet').querySelector('.sheet-body').scrollTop = 0;
   history.pushState({ sheet: true }, '');
@@ -861,7 +895,7 @@ function dropSheetFaders() {
 }
 function hideSheet() {
   if (S.open == null) return;
-  velTag?.remove();
+  clearVel();
   S.open = null;
   sheetParts = null;
   dropSheetFaders();

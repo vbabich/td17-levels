@@ -59,9 +59,14 @@
   @keyframes recpulse { 50% { box-shadow:0 0 0 4px color-mix(in srgb, var(--bad) 35%, transparent); } }
   #cog { touch-action:manipulation; } #cog .i-cog { display:block; fill:var(--muted); }
   #recsPanel { width:min(96vw, 440px); padding:14px 14px 12px; }
+  #recsPanel[open] { display:flex; flex-direction:column; max-height:min(92dvh, 640px); }
+  #recsPanel .sticky { flex:none; display:flex; align-items:center; gap:12px; min-height:48px; padding:4px 2px; }
+  #recsPanel .sticky input { flex:none; width:24px; height:24px; margin:0; accent-color:var(--level); }
+  #recsPanel .sticky span { display:grid; gap:1px; font-size:15px; font-weight:600; }
+  #recsPanel .sticky small { font-size:12px; font-weight:400; color:var(--muted); line-height:1.25; }
   #recsPanel .head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
   #recsPanel h2 { flex:1; margin:0; }
-  #recsList { max-height:min(60vh, 440px); overflow-y:auto; overscroll-behavior:contain; margin:0 -6px; padding:0; list-style:none; }
+  #recsList { flex:1 1 auto; min-height:96px; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; -webkit-overflow-scrolling:touch; margin:0 -6px; padding:0; list-style:none; }
   #recsList li { display:flex; align-items:center; gap:2px; min-height:52px; padding:0 2px 0 0; border-top:1px solid var(--line); background:var(--card); }
   #recsList li.moving { background:var(--raise); box-shadow:0 2px 10px rgba(0,0,0,.35); position:relative; }
   #recsList .grip, #recsList .del, #recsList .rowplay { flex:none; width:44px; min-height:44px; padding:0; display:grid; place-items:center; border:0; background:transparent; }
@@ -150,9 +155,13 @@
   .vel { position:absolute; pointer-events:none; width:58px; display:grid; gap:2px; font-size:12px; color:var(--level); animation:velfade 1.6s ease-out forwards; }
   .vel b { font-weight:600; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
   .vel i { display:block; height:3px; border-radius:2px; background:var(--level); }
-  .pad > .vel { right:12px; bottom:8px; }
+  .maxv { position:absolute; pointer-events:none; width:58px; display:grid; gap:2px; font-size:12px; color:var(--muted); }
+  .maxv b { font-weight:600; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+  .maxv i { display:block; height:3px; border-radius:2px; background:var(--muted); opacity:.7; }
+  .has-vel > .maxv { visibility:hidden; }
+  .pad > .vel, .pad > .maxv { right:12px; bottom:8px; }
   .detail-col h3 { position:relative; }
-  h3 > .vel { text-transform:none; letter-spacing:0; right:0; top:50%; transform:translateY(-50%); }
+  h3 > .vel, h3 > .maxv { text-transform:none; letter-spacing:0; right:0; top:50%; transform:translateY(-50%); }
   @keyframes velfade { 0%, 25% { opacity:1; } 100% { opacity:0; } }
   .pad.loading { opacity:.35; }
   .pad.loading .fader { visibility:hidden; }
@@ -318,6 +327,7 @@
 
 <dialog id="recsPanel">
   <div class="head"><h2>Recordings</h2><button id="recsClose" class="primary">Done</button></div>
+  <label class="sticky"><input type="checkbox" id="stickyMax"><span>Sticky max velocity<small>Keeps the loudest hit per pad and zone on screen. Untick and tick again to reset.</small></span></label>
   <p id="recsEmpty" hidden>No recordings of your own yet. Press Record and play the kit. The two built-in ones stay in the Play list.</p>
   <ul id="recsList"></ul>
 </dialog>
@@ -328,6 +338,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=15"></script>
+<script type="module" src="mixer.js?v=16"></script>
 </body>
 </html>
