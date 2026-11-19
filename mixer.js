@@ -155,15 +155,16 @@ function makeMeter(parent, maxOf) {
   track.append(bar, mark);
   el.append(txt, track);
   parent.append(el);
-  return { el, txt, bar, mark, maxOf, v: 0, t: 0 };
+  const m = { el, txt, bar, mark, maxOf, v: 0, t: 0 };
+  paintMeter(m);
+  return m;
 }
 function paintMeter(m, now = performance.now()) {
   const age = now - m.t, max = stickyMax ? m.maxOf() : 0, fresh = m.t > 0 && age < HOLD_MS_VEL;
   m.bar.style.width = `${m.t > 0 ? m.v * Math.max(0, 1 - age / DRAIN_MS) / 127 * 100 : 0}%`;
   m.mark.style.display = max ? 'block' : 'none';
   if (max) m.mark.style.left = `${max / 127 * 100}%`;
-  if (fresh || max) m.txt.textContent = fresh ? `vel ${m.v}` : `max ${max}`; // without a max the last text fades out in place
-  m.txt.style.opacity = fresh || max ? '1' : '0';
+  m.txt.textContent = fresh ? `vel ${m.v}` : stickyMax ? `max ${max}` : 'vel 0'; // the label is always there
   m.txt.classList.toggle('now', fresh);
   return age < HOLD_MS_VEL + 50;
 }
