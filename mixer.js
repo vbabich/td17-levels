@@ -1342,6 +1342,10 @@ const giveUp = (message) => closeLink(message);
 const stopLink = () => closeLink();
 
 $('connectBtn').onclick = connect;
+// A reload asks the server whether the page changed, so this picks up a new release even when the old one is cached.
+const VERSION = new URL(import.meta.url).searchParams.get('v');
+$('reloadBtn').textContent = VERSION ? `Reload app (version ${VERSION})` : 'Reload app';
+$('reloadBtn').onclick = () => location.reload();
 $('conn').onclick = async () => {
   if (S.conn !== 'connected') return;
   if (!await ask('Disconnect from the TD-17?', 'Changes you made stay stored on the module.', 'Disconnect')) return;

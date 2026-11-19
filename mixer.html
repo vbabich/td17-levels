@@ -225,6 +225,7 @@
   #connect p { margin:0; color:var(--muted); max-width:30em; font-size:15px; }
   #connect #connectMsg { color:var(--bad); font-weight:600; min-height:1.3em; }
   #connect button { min-height:60px; font-size:19px; padding:0 28px; }
+  #connect .link { min-height:44px; font-size:14px; padding:0 12px; background:transparent; border:0; color:var(--muted); text-decoration:underline; }
 
   /* ---------- one pad opened ---------- */
   #sheet { position:fixed; z-index:20; inset:0; background:var(--bg); display:grid; grid-template-rows:auto minmax(0,1fr);
@@ -303,6 +304,7 @@
   <button class="primary" id="connectBtn">Connect via Bluetooth</button>
   <p>On the module: SETUP → Bluetooth → Bluetooth MIDI on. Connect from here, not from the phone's Bluetooth settings.</p>
   <p id="connectMsg" role="status"></p>
+  <button id="reloadBtn" class="link">Reload app</button>
 </section>
 
 <nav id="tools">
@@ -355,6 +357,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=32"></script>
+<script type="module" src="mixer.js?v=33"></script>
 </body>
 </html>
