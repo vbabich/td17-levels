@@ -545,3 +545,8 @@ export function nextKitToName(known, failed, visible, current) {
   for (let k = 0; k < KIT_COUNT; k++) if (todo(k) && (best == null || Math.abs(k - current) < Math.abs(best - current))) best = k;
   return best;
 }
+
+// ---------- renaming a kit ----------
+// A kit name is 12 characters of plain ASCII: anything else is dropped.
+export const cleanKitName = (s) => [...String(s)].filter((ch) => ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127).join('').slice(0, KIT_NAME_SIZE);
+export const kitNameBytes = (s) => Array.from(cleanKitName(s).padEnd(KIT_NAME_SIZE, ' '), (ch) => ch.charCodeAt(0));

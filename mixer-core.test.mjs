@@ -440,3 +440,12 @@ test('kit menu: user kits and the order names are read in', () => {
   const all = new Set([...Array(100).keys()]);
   assert.equal(core.nextKitToName(all, new Set(), new Set([3]), 0), null);
 });
+
+test('kit names: ASCII only, 12 characters, padded for the module', () => {
+  assert.equal(core.cleanKitName('Studio Rock!!!!'), 'Studio Rock!');
+  assert.equal(core.cleanKitName('Café ☕ Jazz'), 'Caf  Jazz');
+  const b = core.kitNameBytes('Dry Funk');
+  assert.equal(b.length, 12);
+  assert.equal(core.parseKitName(b), 'Dry Funk');
+  assert.ok(b.every((x) => x >= 32 && x < 127));
+});

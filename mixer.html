@@ -221,6 +221,13 @@
   #mixer .fader, .big .fader, .pad .name, .pad .val { padding-bottom:33px; }
   .big .ctl button { margin-bottom:33px; }
 
+  /* ---------- rename a kit ---------- */
+  input, textarea { user-select:text; -webkit-user-select:text; }
+  #renamePanel { width:min(92vw, 360px); }
+  #renameInput { width:100%; min-height:48px; font:inherit; font-size:18px; padding:0 12px; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:10px; box-sizing:border-box; }
+  #renameInput:focus { outline:2px solid var(--level); outline-offset:1px; }
+  #renameHint { margin:8px 2px 14px; font-size:13px; }
+
   /* ---------- kit menu ---------- */
   #kitPanel { width:min(98vw, 760px); max-width:min(98vw, 760px); padding:10px 8px 8px; }
   #kitPanel[open] { display:flex; flex-direction:column; max-height:min(92dvh, 760px); }
@@ -353,6 +360,13 @@
   <div class="btns"><button data-no>Cancel</button><button data-yes class="primary"></button></div>
 </dialog>
 
+<dialog id="renamePanel">
+  <h2 id="renameTitle">Rename kit</h2>
+  <input id="renameInput" maxlength="12" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Kit name">
+  <p id="renameHint">Up to 12 characters: letters, digits and basic symbols.</p>
+  <div class="btns"><button id="renameCancel">Cancel</button><button id="renameSave" class="primary">Save</button></div>
+</dialog>
+
 <dialog id="kitPanel">
   <div class="head"><h2>Kits</h2><button id="kitClose" class="primary">Done</button></div>
   <div id="kitGrid"></div>
@@ -382,6 +396,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=41"></script>
+<script type="module" src="mixer.js?v=42"></script>
 </body>
 </html>

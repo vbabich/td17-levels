@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=15';
+import * as core from './mixer-core.js?v=16';
 import { createSimModule } from './mixer-sim.js?v=3';
 
 const { KIND, valueOf, originalOf } = core;
@@ -242,6 +242,7 @@ let kitTimer = 0;
 const KIT_SETTLE_MS = 500; // the kit wheel must rest this long before anything is read
 function kitSignal(kit) {
   clearTimeout(kitTimer);
+  if (kit != null) markCurrentKit(kit); // the module said which kit it is on: show it at once
   if (S.conn === 'connected' && S.loaded < core.PAD_COUNT) loadSeq++; // a read in progress stops at once: no requests for a kit that is already gone
   kitTimer = setTimeout(async () => {
     if (S.conn !== 'connected') return;
@@ -260,6 +261,48 @@ const kitPanel = $('kitPanel'), kitGrid = $('kitGrid');
 const kitVisible = new Set();
 let kitObserver = null;
 
+// Press and hold. The returned function tells a click handler whether the press just ended was a long one (once).
+function longPress(el, onLong, ms = 500) {
+  let timer = 0, fired = false;
+  el.addEventListener('pointerdown', () => { fired = false; clearTimeout(timer); timer = setTimeout(() => { fired = true; buzz(20); onLong(); }, ms); });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(t, () => clearTimeout(timer));
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+  return () => { const was = fired; fired = false; return was; };
+}
+
+// ---------- renaming a kit ----------
+const renamePanel = $('renamePanel'), renameInput = $('renameInput');
+let renameKitNo = null;
+function openRename(k) {
+  if (S.conn !== 'connected' || k == null) return;
+  renameKitNo = k;
+  $('renameTitle').textContent = `Rename kit ${k + 1}`;
+  renameInput.value = kitNames.get(k) ?? (k === S.kit ? S.model?.name ?? '' : '');
+  renamePanel.showModal();
+  renameInput.select();
+}
+renameInput.addEventListener('input', () => { const c = core.cleanKitName(renameInput.value); if (c !== renameInput.value) renameInput.value = c; });
+renameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('renameSave').click(); } });
+$('renameCancel').onclick = () => renamePanel.close();
+renamePanel.addEventListener('click', (e) => { if (e.target === renamePanel) renamePanel.close(); });
+$('renameSave').onclick = async () => {
+  const k = renameKitNo, name = core.cleanKitName(renameInput.value).trim();
+  if (!name) { $('renameHint').textContent = 'Enter a name first.'; return; }
+  renamePanel.close();
+  if (S.conn !== 'connected') return;
+  try {
+    await send(td.dt1(deviceId, core.kitNameAddress(k), core.kitNameBytes(name)));
+    await sleep(100);
+    const kept = core.parseKitName(await request(core.kitNameAddress(k), core.KIT_NAME_SIZE, 1200));
+    kitNames.set(k, kept);
+    kitFailed.delete(k);
+    if (kitPanel.open) paintKitItem(k);
+    if (k === S.kit && S.model) { S.model.name = kept; repaint(); }
+    if (kept !== name) showNotice(`The module kept the name "${kept}"`);
+  } catch (e) { showNotice(`Could not rename the kit: ${e.message}`); }
+};
+renamePanel.addEventListener('close', () => { $('renameHint').textContent = 'Up to 12 characters: letters, digits and basic symbols.'; });
+
 function kitLabel(k) { const n = kitNames.get(k); return n === undefined ? ['…', true] : [n || '(unnamed)', false]; }
 function paintKitItem(k) {
   const b = kitGrid.querySelector(`[data-kit="${k}"]`);
@@ -267,6 +310,15 @@ function paintKitItem(k) {
   const [text, wait] = kitLabel(k), name = b.querySelector('b');
   name.textContent = kitFailed.has(k) && !kitNames.has(k) ? '–' : text;
   name.classList.toggle('wait', wait || kitFailed.has(k));
+}
+// While the menu is open, the outline follows the kit the module is on.
+function markCurrentKit(kit = S.kit) {
+  if (!kitPanel.open || kit == null) return;
+  const now = kitGrid.querySelector(`[data-kit="${kit}"]`);
+  if (!now || now.classList.contains('cur')) return;
+  kitGrid.querySelector('.cur')?.classList.remove('cur');
+  now.classList.add('cur');
+  now.scrollIntoView({ block: 'nearest' });
 }
 function openKitMenu() {
   if (S.conn !== 'connected') return;
@@ -281,7 +333,8 @@ function openKitMenu() {
     const b = h('button', `kititem${core.isUserKit(k) ? ' user' : ''}${k === S.kit ? ' cur' : ''}`);
     b.dataset.kit = k;
     b.append(h('span', 'n', `${k + 1}:`), h('b'));
-    b.onclick = () => { kitPanel.close(); if (k !== S.kit) selectKit(k); };
+    const wasLong = longPress(b, () => openRename(k));
+    b.onclick = () => { if (wasLong()) return; kitPanel.close(); if (k !== S.kit) selectKit(k); };
     kitGrid.append(b);
     kitObserver.observe(b);
     paintKitItem(k);
@@ -304,7 +357,8 @@ async function loadKitNames(epoch) {
 kitPanel.addEventListener('close', () => { kitMenuEpoch++; kitObserver?.disconnect(); });
 kitPanel.addEventListener('click', (e) => { if (e.target === kitPanel) kitPanel.close(); });
 $('kitClose').onclick = () => kitPanel.close();
-$('kit').onclick = openKitMenu;
+const kitWasLong = longPress($('kit'), () => openRename(S.kit));
+$('kit').onclick = () => { if (kitWasLong()) return; openKitMenu(); };
 $('kit').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openKitMenu(); } });
 
 // Asks the module to switch kits, then checks that it did before showing the new kit.
@@ -346,7 +400,7 @@ async function loadKit(kit = null) {
     const model = S.model;
     for (const pad of model.pads) pad.mainsRead = false;
     // The kit name is a nicety: a kit without a readable name just shows its number.
-    try { model.name = core.parseKitName(await request(core.kitNameAddress(number), core.KIT_NAME_SIZE, 800)); kitNames.set(number, model.name); }
+    try { model.name = core.parseKitName(await request(core.kitNameAddress(number), core.KIT_NAME_SIZE, 800)); kitNames.set(number, model.name); if (kitPanel.open) paintKitItem(number); }
     catch { alive(); }
     alive();
     // Stage 1: the main level of every zone, so all ten rows show a level within a second or so.
@@ -811,7 +865,7 @@ function repaintRowPlay() {
     if (!on) b.querySelector('.ring circle + circle').style.strokeDashoffset = '';
   }
 }
-document.addEventListener('selectstart', (e) => e.preventDefault()); // no text selection anywhere
+document.addEventListener('selectstart', (e) => { if (!e.target.closest?.('input, textarea')) e.preventDefault(); }); // no text selection, except while typing a name
 
 // ---------- the row's three-dot menu: export and delete ----------
 const rowMenu = $('rowMenu');
@@ -1020,6 +1074,7 @@ function repaint() {
   else $('banner').hidden = true;
 
   if (S.open != null) paintSheet();
+  markCurrentKit();
   repaintRecPlay();
 }
 
