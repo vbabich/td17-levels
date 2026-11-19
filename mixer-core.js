@@ -176,7 +176,7 @@ export const NOTE_MAP = {
   'Tom 1': [48, 50],
   'Tom 2': [45, 47],
   'Tom 3': [43, 58],
-  'Hi-Hat': [42, 46, 44],
+  'Hi-Hat': [42, 46, 44, 22, 26], // closed bow, open bow, pedal, closed edge, open edge (the last two from memory of the TD-series map)
   'Crash 1': [49, 55],
   'Crash 2': [57, 52],
   'Ride': [51, 59, 53],
@@ -187,7 +187,7 @@ export const padOfNote = (note) => Object.keys(NOTE_MAP).find((p) => NOTE_MAP[p]
 // What a note on a pad hits, for the highlight in the app: the pad (index in td.GROUPS), the zone
 // (index in pad.zones) or, for cross-stick and the chick of the hi-hat pedal, the pad's extra value.
 // Head/bow = zone 0, rim/edge = 1, bell = 2.
-const ZONE_OF = { 'Snare': [0, 1], 'Tom 1': [0, 1], 'Tom 2': [0, 1], 'Tom 3': [0, 1], 'Hi-Hat': [0, 0], 'Crash 1': [0, 1], 'Crash 2': [0, 1], 'Ride': [0, 1, 2] };
+const ZONE_OF = { 'Snare': [0, 1], 'Tom 1': [0, 1], 'Tom 2': [0, 1], 'Tom 3': [0, 1], 'Hi-Hat': [0, 0, 0, 1, 1], 'Crash 1': [0, 1], 'Crash 2': [0, 1], 'Ride': [0, 1, 2] };
 export function noteTarget(note) {
   const name = padOfNote(note);
   if (!name) return null;

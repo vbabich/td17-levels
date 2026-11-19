@@ -290,3 +290,8 @@ test('prefs are validated', () => {
   assert.deepEqual(core.sanitizePrefs(null), { order: [], gains: {} });
   assert.deepEqual(core.sanitizePrefs({ order: ['a', 3], gains: { a: 0.5, b: 'x', c: -1 } }), { order: ['a'], gains: { a: 0.5 } });
 });
+
+test('hi-hat edge notes highlight the Edge zone', () => {
+  assert.deepEqual(core.noteTarget(22), { pad: 5, zone: 1, extra: null });
+  assert.deepEqual(core.noteTarget(26), { pad: 5, zone: 1, extra: null });
+});
