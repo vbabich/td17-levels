@@ -60,13 +60,14 @@
   #cog { touch-action:manipulation; } #cog .i-cog { display:block; fill:var(--muted); }
   #recsPanel { width:min(96vw, 440px); padding:14px 14px 12px; }
   #recsPanel[open] { display:flex; flex-direction:column; max-height:min(92dvh, 640px); }
-  #recsPanel .imp { flex:none; display:flex; align-items:center; gap:10px; min-height:48px; }
-  #recsPanel .imp button { flex:none; min-height:44px; }
-  #importMsg { flex:1; min-width:0; font-size:12px; line-height:1.25; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  #importMsg.bad { color:var(--bad); }
-  #rowMenu { position:fixed; z-index:30; min-width:190px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.35); padding:4px; }
-  #rowMenu button { display:block; width:100%; text-align:left; min-height:48px; border:0; background:transparent; }
-  #rowMenu button:active { background:var(--raise); } #rowMenu .danger { color:var(--bad); } #rowMenu button:disabled { opacity:.3; }
+  #recsPanel .stickyrow { flex:none; display:flex; align-items:center; gap:4px; }
+  #recsPanel .stickyrow .sticky { flex:1; min-width:0; }
+  #recsPanel .more2 { flex:none; width:44px; min-height:44px; padding:0; display:grid; place-items:center; border:0; background:transparent; }
+  #recsPanel .more2 svg { width:22px; height:22px; fill:var(--muted); }
+  #stickyHint.bad { color:var(--bad); }
+  #rowMenu, #topMenu { position:fixed; z-index:30; min-width:190px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.35); padding:4px; }
+  #rowMenu button, #topMenu button { display:block; width:100%; text-align:left; min-height:48px; border:0; background:transparent; }
+  #rowMenu button:active, #topMenu button:active { background:var(--raise); } #rowMenu .danger { color:var(--bad); } #rowMenu button:disabled { opacity:.3; }
   #recsPanel .sticky { flex:none; display:flex; align-items:center; gap:12px; min-height:48px; padding:4px 2px; }
   #recsPanel .sticky input { flex:none; width:24px; height:24px; margin:0; accent-color:var(--level); }
   #recsPanel .sticky span { display:grid; gap:1px; font-size:15px; font-weight:600; }
@@ -331,10 +332,14 @@
 
 <dialog id="recsPanel">
   <div class="head"><h2>Recordings</h2><button id="recsClose" class="primary">Done</button></div>
-  <div class="imp"><button id="importBtn">Import MIDI file</button><span id="importMsg" role="status"></span><input type="file" id="importFile" accept=".mid,.midi,audio/midi,audio/x-midi" hidden></div>
-  <label class="sticky"><input type="checkbox" id="stickyMax"><span>Sticky max velocity<small>Keeps the loudest hit per pad and zone on screen. Untick and tick again to reset.</small></span></label>
+  <div class="stickyrow">
+    <label class="sticky"><input type="checkbox" id="stickyMax" checked autocomplete="off"><span>Sticky max velocity<small id="stickyHint">Keeps the loudest hit per pad and zone on screen. Untick and tick again to reset.</small></span></label>
+    <button id="topMore" class="more2" aria-label="More options" aria-haspopup="menu"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+  </div>
+  <input type="file" id="importFile" accept=".mid,.midi,audio/midi,audio/x-midi" hidden>
   <p id="recsEmpty" hidden>No recordings of your own yet. Press Record and play the kit. The two built-in ones stay in the Play list.</p>
   <ul id="recsList"></ul>
+  <div id="topMenu" role="menu" hidden><button data-act="import" role="menuitem">Import MIDI file</button></div>
   <div id="rowMenu" role="menu" hidden>
     <button data-act="export" role="menuitem">Export MIDI file</button>
     <button data-act="delete" role="menuitem" class="danger">Delete</button>
@@ -349,6 +354,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=21"></script>
+<script type="module" src="mixer.js?v=22"></script>
 </body>
 </html>

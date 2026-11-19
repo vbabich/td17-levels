@@ -140,7 +140,7 @@ const hitTimers = new Map();
 // velocity and drain away fast; "vel N" stays for a moment, then "max N" (sticky) or nothing.
 // With sticky on, an orange mark on the track sits at the loudest hit seen since the box was ticked.
 const HOLD_MS_VEL = 800, DRAIN_MS = 350;
-let stickyMax = false;
+let stickyMax = true; // on by default; the checkbox in Settings turns it off
 const maxByNote = new Map();
 const liveMeters = new Set(); // meters still animating
 let meterFrame = 0;
@@ -743,13 +743,34 @@ rowMenu.addEventListener('click', async (e) => {
   saveRecs();
   buildRecsList();
 });
-document.addEventListener('pointerdown', (e) => { if (!rowMenu.hidden && !rowMenu.contains(e.target) && !e.target.closest?.('.more')) closeRowMenu(); }, true);
+document.addEventListener('pointerdown', (e) => {
+  if (!rowMenu.hidden && !rowMenu.contains(e.target) && !e.target.closest?.('.more')) closeRowMenu();
+  if (!topMenu.hidden && !topMenu.contains(e.target) && !e.target.closest?.('#topMore')) topMenu.hidden = true;
+}, true);
 list.addEventListener('scroll', closeRowMenu);
-panel.addEventListener('close', closeRowMenu);
+panel.addEventListener('close', () => { closeRowMenu(); topMenu.hidden = true; });
 
 // ---------- import ----------
-function importMessage(text, bad = false) { const m = $('importMsg'); m.textContent = text; m.classList.toggle('bad', bad); }
-$('importBtn').onclick = () => $('importFile').click();
+const HINT = 'Keeps the loudest hit per pad and zone on screen. Untick and tick again to reset.';
+let hintTimer = 0;
+// The result of an import shows in place of the checkbox's hint line for a few seconds.
+function importMessage(text, bad = false) {
+  const m = $('stickyHint');
+  clearTimeout(hintTimer);
+  m.textContent = text || HINT;
+  m.classList.toggle('bad', bad && Boolean(text));
+  if (text) hintTimer = setTimeout(() => importMessage(''), 6000);
+}
+const topMenu = $('topMenu');
+$('topMore').onclick = (e) => {
+  e.stopPropagation();
+  closeRowMenu();
+  topMenu.hidden = false;
+  const b = $('topMore').getBoundingClientRect();
+  topMenu.style.right = `${Math.max(8, innerWidth - b.right)}px`;
+  topMenu.style.top = `${b.bottom + 2}px`;
+};
+topMenu.onclick = (e) => { if (e.target.closest('button')?.dataset.act === 'import') { topMenu.hidden = true; $('importFile').click(); } };
 $('importFile').onchange = async (e) => {
   const file = e.target.files[0];
   e.target.value = '';
@@ -771,6 +792,7 @@ $('importFile').onchange = async (e) => {
 
 $('cog').onclick = () => { closeMenu(); importMessage(''); buildRecsList(); panel.showModal(); };
 // Ticking (and unticking) starts a new measurement: the stored maxima are cleared.
+$('stickyMax').checked = stickyMax; // do not trust the browser to restore the box
 $('stickyMax').onchange = (e) => { stickyMax = e.target.checked; maxByNote.clear(); renderMax(); };
 $('recsClose').onclick = () => panel.close();
 panel.addEventListener('click', (e) => { if (e.target === panel) panel.close(); });
