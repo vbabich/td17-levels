@@ -400,3 +400,17 @@ test('a drum loop written on channel 1 is replayed on channel 10', () => {
   assert.equal(r.channel, 9);
   assert.equal(core.playbackMessages(r)[0].bytes[0], 0x99);
 });
+
+test('retryUntil waits out a slow success but gives up after the window', async () => {
+  let clock = 0, calls = 0;
+  const sleep = async (ms) => { clock += ms; };
+  const okAfter = (n) => async () => { if (++calls < n) throw new Error('not yet'); return 'ok'; };
+  assert.equal(await core.retryUntil(okAfter(8), { windowMs: 15000, everyMs: 1000, sleep, now: () => clock }), 'ok'); // 7 failures, 7 s
+  assert.equal(clock, 7000);
+  calls = 0; clock = 0;
+  await assert.rejects(core.retryUntil(okAfter(1000), { windowMs: 15000, everyMs: 1000, sleep, now: () => clock }), /not yet/);
+  assert.equal(clock, 15000);
+  calls = 0; clock = 0;
+  await assert.rejects(core.retryUntil(okAfter(1000), { windowMs: 15000, sleep, now: () => clock, shouldStop: () => true }), /not yet/);
+  assert.equal(clock, 0); // a real disconnect stops it at once
+});

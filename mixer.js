@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=12';
+import * as core from './mixer-core.js?v=13';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -12,6 +12,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SIM = new URLSearchParams(location.search).has('sim');
 const MIN_GAP_MS = 20;   // Roland: leave at least 20 ms between DT1 messages
 const MAX_RETRIES = 3;
+const PAIR_WAIT_MS = 15000; // how long to wait for the phone's pairing dialogs to be answered
 const STABLE_MS = 30000; // a link up this long starts with a fresh set of retries
 const MESSAGE_KEY = 'td17-mixer-message';
 
@@ -27,6 +28,7 @@ const S = {
   open: null,           // pad shown in the pad view
   attempt: 0,
   loadError: false,
+  pairing: false,       // waiting for the phone's pairing dialogs
   notice: '',
   message: '',          // shown on the connect screen
 };
@@ -914,9 +916,9 @@ function repaint() {
   document.body.classList.toggle('locked', locked(0) && S.loaded > 0);
   $('mixer').hidden = !live;
   $('connect').hidden = live;
-  $('connText').textContent = { connected: 'Connected', connecting: 'Connecting…', reconnecting: 'Reconnecting…', disconnected: 'Not connected' }[S.conn];
+  $('connText').textContent = { connected: 'Connected', connecting: S.pairing ? 'Pairing…' : 'Connecting…', reconnecting: 'Reconnecting…', disconnected: 'Not connected' }[S.conn];
   $('connectBtn').disabled = S.conn === 'connecting';
-  $('connectBtn').textContent = S.conn === 'connecting' ? 'Connecting…' : SIM ? 'Connect to simulator' : 'Connect via Bluetooth';
+  $('connectBtn').textContent = S.conn === 'connecting' ? (S.pairing ? 'Waiting for pairing…' : 'Connecting…') : SIM ? 'Connect to simulator' : 'Connect via Bluetooth';
   $('connectMsg').textContent = S.message;
   $('kit').style.visibility = live ? '' : 'hidden';
   $('kitNo').textContent = S.kit == null ? 'Kit' : `Kit ${S.kit + 1}`;
@@ -1157,13 +1159,15 @@ function bleLink() {
       ch.addEventListener('characteristicvaluechanged', listener);
       // The BLE-MIDI spec has the central read first; on an encrypted link this prompts pairing.
       try { await ch.readValue(); } catch (e) { console.warn('Initial read:', e.message); }
-      for (let attempt = 1; ; attempt++) {
-        try { await ch.startNotifications(); break; }
-        catch (e) {
-          if (attempt === 3 || !device.gatt.connected) throw e;
-          await sleep(1500); // pairing may still be completing
-        }
-      }
+      // Pairing on Android takes two dialogs and some tapping. Wait for it (up to PAIR_WAIT_MS) rather than
+      // giving up and reconnecting, which can cancel the pairing in progress.
+      try {
+        await core.retryUntil(() => ch.startNotifications(), {
+          windowMs: PAIR_WAIT_MS, everyMs: 1000, sleep, now: () => performance.now(),
+          shouldStop: () => !device.gatt.connected,
+          onWait: () => { if (!S.pairing) { S.pairing = true; repaint(); } },
+        });
+      } finally { if (S.pairing) { S.pairing = false; repaint(); } }
       const canSkipResponse = ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse;
       // Every write goes through one queue, one whole message at a time: notes can slip in between
       // two SysEx messages (and the 20 ms gap after each) but never inside a multi-packet one.

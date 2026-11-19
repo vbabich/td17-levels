@@ -510,3 +510,16 @@ export function parseMidiFile(bytes) {
   // so imported notes are always replayed there. Many drum loops are written on channel 1, which the module ignores.
   return { channel: DRUM_CHANNEL, sourceChannel: channel, events, notes: played.length, unmapped: played.filter((e) => padOfNote(e.n) == null).length, truncated };
 }
+
+// Tries `action` again every `everyMs` until it works, `windowMs` have passed, or shouldStop() is true; then
+// rethrows the last error. Used to wait out Android's pairing dialogs instead of giving up and starting over.
+export async function retryUntil(action, { windowMs, everyMs = 1000, sleep, now, shouldStop = () => false, onWait = () => {} }) {
+  const deadline = now() + windowMs;
+  for (;;) {
+    try { return await action(); } catch (e) {
+      if (shouldStop() || now() >= deadline) throw e;
+      onWait(e);
+      await sleep(everyMs);
+    }
+  }
+}
