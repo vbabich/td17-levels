@@ -280,7 +280,7 @@ function openKitMenu() {
   for (let k = 0; k < core.KIT_COUNT; k++) {
     const b = h('button', `kititem${core.isUserKit(k) ? ' user' : ''}${k === S.kit ? ' cur' : ''}`);
     b.dataset.kit = k;
-    b.append(h('small', '', `KIT ${k + 1}`), h('b'));
+    b.append(h('span', 'n', `${k + 1}:`), h('b'));
     b.onclick = () => { kitPanel.close(); if (k !== S.kit) selectKit(k); };
     kitGrid.append(b);
     kitObserver.observe(b);
