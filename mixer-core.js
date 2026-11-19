@@ -184,6 +184,20 @@ export const NOTE_MAP = {
 };
 export const padOfNote = (note) => Object.keys(NOTE_MAP).find((p) => NOTE_MAP[p].includes(note)) ?? null;
 
+// What a note on a pad hits, for the highlight in the app: the pad (index in td.GROUPS), the zone
+// (index in pad.zones) or, for cross-stick and the chick of the hi-hat pedal, the pad's extra value.
+// Head/bow = zone 0, rim/edge = 1, bell = 2.
+const ZONE_OF = { 'Snare': [0, 1], 'Tom 1': [0, 1], 'Tom 2': [0, 1], 'Tom 3': [0, 1], 'Hi-Hat': [0, 0], 'Crash 1': [0, 1], 'Crash 2': [0, 1], 'Ride': [0, 1, 2] };
+export function noteTarget(note) {
+  const name = padOfNote(note);
+  if (!name) return null;
+  const pad = td.GROUPS.findIndex((g) => g.name === name);
+  const at = NOTE_MAP[name].indexOf(note);
+  if (name === 'Snare' && note === 37) return { pad, zone: null, extra: 'xstickVolume' };
+  if (name === 'Hi-Hat' && note === 44) return { pad, zone: null, extra: 'pedalHhVolume' };
+  return { pad, zone: ZONE_OF[name]?.[at] ?? 0, extra: null };
+}
+
 export const HAT_CC = 4;          // hi-hat control pedal position
 export const DRUM_CHANNEL = 9;    // MIDI channel 10, zero-based
 export const NOTE_MS = 60;        // replayed notes are held this long

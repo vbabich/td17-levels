@@ -255,3 +255,14 @@ test('sim module logs short messages and can play notes into the app', () => {
   m.hit(38, 90); m.pedal(20);
   return sleep(10).then(() => assert.deepEqual(got, [[0x99, 38, 90], [0xb9, 4, 20]]));
 });
+
+test('a hit maps to the pad, zone or extra value it edits', () => {
+  assert.deepEqual(core.noteTarget(36), { pad: 0, zone: 0, extra: null });
+  assert.deepEqual(core.noteTarget(40), { pad: 1, zone: 1, extra: null });   // snare rim
+  assert.deepEqual(core.noteTarget(37), { pad: 1, zone: null, extra: 'xstickVolume' });
+  assert.deepEqual(core.noteTarget(44), { pad: 5, zone: null, extra: 'pedalHhVolume' });
+  assert.deepEqual(core.noteTarget(46), { pad: 5, zone: 0, extra: null });   // open hi-hat is the bow
+  assert.deepEqual(core.noteTarget(53), { pad: 8, zone: 2, extra: null });   // ride bell
+  assert.equal(core.noteTarget(1), null);
+  for (const notes of Object.values(core.NOTE_MAP)) for (const n of notes) assert.ok(core.noteTarget(n));
+});

@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=2';
+import * as core from './mixer-core.js?v=3';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -121,6 +121,7 @@ function onMidi(msg) {
       solicited = true;
     }
   }
+  if ((msg[0] & 0xf0) === 0x90 && msg[2] > 0) showHit(msg[1]);
   if (recorder) { // the drummer's notes and hi-hat pedal
     const type = msg[0] & 0xf0;
     if (type === 0x90 && msg[2] > 0) recorder.note(msg[0] & 15, msg[1], msg[2]);
@@ -131,6 +132,25 @@ function onMidi(msg) {
   if (msg[0] !== 0xf0 || solicited) return;
   const d = td.parseDt1(msg);
   if (d?.checksumOk) applyModuleMessage(d);
+}
+
+// A pad was hit on the module: lightly mark the pad row and, in the pad view, the values that hit edits.
+const hitTimers = new Map();
+function showHit(note) {
+  const t = core.noteTarget(note);
+  if (!t || !S.model || t.pad >= S.loaded) return;
+  const mark = (el) => {
+    el.classList.add('hit');
+    clearTimeout(hitTimers.get(el));
+    hitTimers.set(el, setTimeout(() => el.classList.remove('hit'), 220));
+  };
+  mark(padEls[t.pad].pad);
+  if (S.open !== t.pad || !sheetParts) return;
+  const pad = S.model.pads[t.pad];
+  for (const { r, p } of sheetParts.rows) {
+    const hit = t.extra ? p.role === 'extra' && p.addr.join() === td.address[t.extra](S.kit).join() : p.role !== 'extra' && p.zone === pad.zones[t.zone]?.name;
+    if (hit) mark(r);
+  }
 }
 
 const flashTimers = new Map();

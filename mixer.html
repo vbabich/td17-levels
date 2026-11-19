@@ -105,6 +105,9 @@
   @media (max-width: 440px) { .pad .val small { display:none; } #conn span { display:none; } body[data-conn=connecting] #conn span, body[data-conn=disconnected] #conn span { display:inline; } }
   .pad.flash .val { color:var(--accent); }
   .pad.flash { background:color-mix(in srgb, var(--accent) 12%, transparent); }
+  .pad, .drow { transition:background-color .35s ease-out, border-color .35s ease-out; }
+  .pad.hit, .drow.hit { background:color-mix(in srgb, var(--level) 20%, transparent); transition-duration:0s; }
+  .drow.hit { border-left-color:var(--level); }
   .pad.loading { opacity:.35; }
   .pad.loading .fader { visibility:hidden; }
   .pad:has(.fader.drag) { background:var(--raise); }
@@ -271,6 +274,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=3"></script>
+<script type="module" src="mixer.js?v=4"></script>
 </body>
 </html>
