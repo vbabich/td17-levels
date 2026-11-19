@@ -295,3 +295,17 @@ test('hi-hat edge notes highlight the Edge zone', () => {
   assert.deepEqual(core.noteTarget(22), { pad: 5, zone: 1, extra: null });
   assert.deepEqual(core.noteTarget(26), { pad: 5, zone: 1, extra: null });
 });
+
+test('player can change a message just before it is sent (live loudness)', () => {
+  let clock = 0, gain = 1, timers = [];
+  const sent = [];
+  const player = core.createPlayer({
+    send: (b) => sent.push(b), now: () => clock,
+    setTimer: (fn) => timers.push(fn), clearTimer: () => { timers = []; },
+    transform: (b) => (b[0] >> 4 === 9 ? [b[0], b[1], core.scaleVelocity(b[2], gain)] : b),
+  });
+  const run = (ms) => { const end = clock + ms; while (clock < end) { clock += 5; const f = timers.shift(); timers = []; f?.(); } };
+  player.play(core.playbackMessages({ channel: 9, events: [{ t: 0, n: 36, v: 100 }, { t: 500, n: 38, v: 100 }] }));
+  run(100); gain = 0.5; run(600);
+  assert.deepEqual(sent.filter((b) => b[0] >> 4 === 9).map((b) => b[2]), [100, 50]);
+});

@@ -276,14 +276,14 @@ export function playbackMessages(rec, gain = 1) {
 // Plays timed messages with a look-ahead: one timer wakes every tickMs and sends whatever is due
 // within the next lookMs, so a late timer shifts a note by at most one tick and nothing is chained.
 // stop() sends a Note Off for every note still sounding.
-export function createPlayer({ send, now, setTimer = setTimeout, clearTimer = clearTimeout, tickMs = 10, lookMs = 5, onChange = () => {} }) {
+export function createPlayer({ send, now, setTimer = setTimeout, clearTimer = clearTimeout, tickMs = 10, lookMs = 5, onChange = () => {}, transform = (b) => b }) {
   let queue = [], i = 0, t0 = 0, timer = null, playing = false;
   const sounding = new Set();
   const fire = (bytes) => {
     const [status, n] = bytes;
     if ((status & 0xf0) === 0x90) sounding.add(`${status & 15}:${n}`);
     else if ((status & 0xf0) === 0x80) sounding.delete(`${status & 15}:${n}`);
-    try { send(bytes); } catch { /* link gone: the app ends playback itself */ }
+    try { send(transform(bytes)); } catch { /* link gone: the app ends playback itself */ }
   };
   const end = () => { clearTimer(timer); timer = null; queue = []; playing = false; onChange(); };
   const tick = () => {

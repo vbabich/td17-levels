@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=7';
+import * as core from './mixer-core.js?v=8';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -508,7 +508,7 @@ const LONG_PRESS_MS = 500;
 let recorder = null;       // while recording
 let userRecs = [];         // recorded on this phone
 let lastPlayed = null;     // { id, at }
-let playingId = null;
+let playingId = null, playingRec = null;
 try {
   userRecs = (JSON.parse(localStorage.getItem(RECS_KEY) ?? '[]') ?? []).map(core.sanitizeRecording).filter(Boolean);
   const l = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null');
@@ -530,7 +530,9 @@ function saveRecs() {
 const player = core.createPlayer({
   send: (bytes) => { transport?.sendShort(bytes)?.catch?.(() => {}); },
   now: () => performance.now(),
-  onChange: () => { if (!player.playing) playingId = null; repaintRecPlay(); },
+  // Loudness is applied as each note goes out, so the slider in Settings changes playback live.
+  transform: (b) => ((b[0] & 0xf0) === 0x90 && playingRec ? [b[0], b[1], core.scaleVelocity(b[2], gainOf(playingRec))] : b),
+  onChange: () => { if (!player.playing) playingId = playingRec = null; repaintRecPlay(); },
 });
 
 let toastTimer = 0;
@@ -569,14 +571,16 @@ function drawRing() {
 function playRecording(rec) {
   if (!transport || recorder) return;
   closeMenu();
+  stopPlayback(); // the previous recording's Note Offs go out first; its end resets playingId
   playingId = rec.id;
   lastPlayed = { id: rec.id, at: Date.now() };
   saveRecs();
   playStart = performance.now();
   playMs = core.recordingMs(rec);
-  player.play(core.playbackMessages(rec, gainOf(rec)));
+  playingRec = rec;
+  player.play(core.playbackMessages(rec));
   if (player.playing && !ringFrame) drawRing();
-  if (playingId !== rec.id && !player.playing) playingId = null;
+  if (!player.playing) playingId = playingRec = null;
 }
 function stopPlayback() { player.stop(); }
 
