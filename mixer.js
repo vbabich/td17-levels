@@ -121,7 +121,7 @@ function onMidi(msg) {
       solicited = true;
     }
   }
-  if ((msg[0] & 0xf0) === 0x90 && msg[2] > 0) showHit(msg[1]);
+  if ((msg[0] & 0xf0) === 0x90 && msg[2] > 0) showHit(msg[1], msg[2]);
   if (recorder) { // the drummer's notes and hi-hat pedal
     const type = msg[0] & 0xf0;
     if (type === 0x90 && msg[2] > 0) recorder.note(msg[0] & 15, msg[1], msg[2]);
@@ -136,7 +136,19 @@ function onMidi(msg) {
 
 // A pad was hit on the module: lightly mark the pad row and, in the pad view, the values that hit edits.
 const hitTimers = new Map();
-function showHit(note) {
+let velTag = null, velTimer = 0;
+// One readout at a time: the velocity of the last hit, fading out where it landed.
+function showVelocity(parent, vel) {
+  velTag?.remove();
+  velTag = h('div', 'vel');
+  velTag.append(h('b', '', `vel ${vel}`), h('i'));
+  velTag.lastChild.style.width = `${Math.round(vel / 127 * 100)}%`;
+  parent.append(velTag);
+  const mine = velTag;
+  clearTimeout(velTimer);
+  velTimer = setTimeout(() => { mine.remove(); if (velTag === mine) velTag = null; }, 1600);
+}
+function showHit(note, vel) {
   const t = core.noteTarget(note);
   if (!t || !S.model || t.pad >= S.loaded) return;
   const mark = (el) => {
@@ -145,8 +157,12 @@ function showHit(note) {
     hitTimers.set(el, setTimeout(() => el.classList.remove('hit'), 220));
   };
   mark(padEls[t.pad].pad);
-  if (S.open !== t.pad || !sheetParts) return;
+  if (S.open == null) showVelocity(padEls[t.pad].pad, vel); // with a pad open the list is hidden behind it
+  if (S.open !== t.pad || !sheetParts) { if (S.open != null) velTag?.remove(); return; } // a hit on another pad clears the old readout
   const pad = S.model.pads[t.pad];
+  const extraAt = t.extra ? pad.extras.findIndex((x) => x.addr.join() === td.address[t.extra](S.kit).join()) : -1;
+  const head = sheetParts.heads[t.extra ? pad.zones.length + extraAt : t.zone];
+  if (head) showVelocity(head, vel);
   for (const { r, p } of sheetParts.rows) {
     const hit = t.extra ? p.role === 'extra' && p.addr.join() === td.address[t.extra](S.kit).join() : p.role !== 'extra' && p.zone === pad.zones[t.zone]?.name;
     if (hit) mark(r);
@@ -768,6 +784,7 @@ function repaint() {
 // ---------- one pad opened: pad Level and Pan, why it is orange, then every stored value ----------
 let sheetParts = null;
 function openSheet(i) {
+  velTag?.remove();
   S.open = i;
   dropSheetFaders();
   const pad = S.model.pads[i];
@@ -797,12 +814,13 @@ function openSheet(i) {
     rows.push({ r, lab, out, p });
     return r;
   };
-  const detail = [];
-  for (const z of pad.zones) detail.push(h('h3', '', z.name), row('Main', z.main), row('Sub', z.sub), row('Pan', z.pan));
-  for (const x of pad.extras) detail.push(h('h3', '', x.name), row('Volume', x));
+  const detail = [], heads = [];
+  const head = (text) => { const e = h('h3', '', text); heads.push(e); return e; };
+  for (const z of pad.zones) detail.push(head(z.name), row('Main', z.main), row('Sub', z.sub), row('Pan', z.pan));
+  for (const x of pad.extras) detail.push(head(x.name), row('Volume', x));
   $('sheetDetail').replaceChildren(...detail);
 
-  sheetParts = { level, pan, why, rows };
+  sheetParts = { level, pan, why, rows, heads };
   $('sheet').hidden = false;
   $('sheet').querySelector('.sheet-body').scrollTop = 0;
   history.pushState({ sheet: true }, '');
@@ -830,6 +848,7 @@ function dropSheetFaders() {
 }
 function hideSheet() {
   if (S.open == null) return;
+  velTag?.remove();
   S.open = null;
   sheetParts = null;
   dropSheetFaders();
