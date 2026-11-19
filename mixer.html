@@ -161,7 +161,7 @@
   /* The velocity of the last hit: overlaid where it landed, so nothing moves. */
   .vm { position:absolute; pointer-events:none; width:58px; }
   .vt { height:15px; font-size:12px; line-height:15px; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; transition:opacity .2s; }
-  .vt.now { color:var(--level); }
+  .vt.now { color:var(--pan); } /* the same green as the velocity bar */
   .vb { position:relative; height:6px; background:var(--track); overflow:hidden; } /* square ends */
   .vg { position:absolute; left:0; top:0; bottom:0; width:0; background:var(--pan); }
   .vx { position:absolute; top:0; bottom:0; width:2px; margin-left:-1px; background:var(--accent); display:none; }
@@ -355,6 +355,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=29"></script>
+<script type="module" src="mixer.js?v=30"></script>
 </body>
 </html>
