@@ -585,6 +585,7 @@ function makeRowPlay(r) {
   return play;
 }
 // The velocity slider covers its row (nothing around it moves) and leaves Play within reach.
+const setChip = (chip, n) => { chip.replaceChildren(h('small', '', 'MAX'), h('b', '', String(n))); };
 function openAdjust(li, r, chip) {
   const box = h('div', 'adjust'), slider = h('input'), out = h('output'), ok = h('button', 'ok');
   slider.type = 'range'; slider.min = 1; slider.max = 127; slider.step = 1;
@@ -592,15 +593,26 @@ function openAdjust(li, r, chip) {
   slider.setAttribute('aria-label', `Loudest hit of ${r.name}`);
   const show = () => { out.textContent = slider.value; };
   show();
+  const revert = h('button', 'revert', 'Revert');
+  revert.setAttribute('aria-label', 'Back to the recorded loudness');
+  revert.disabled = !(r.id in prefs.gains);
   slider.oninput = () => {
     show();
     prefs.gains[r.id] = core.gainForMax(r, Number(slider.value));
-    chip.textContent = `Max ${slider.value}`;
+    setChip(chip, Number(slider.value));
+    revert.disabled = false;
   };
   slider.onchange = saveRecs;
+  revert.onclick = () => {
+    delete prefs.gains[r.id];
+    slider.value = core.maxVelocity(r);
+    show(); setChip(chip, Number(slider.value));
+    revert.disabled = true;
+    saveRecs();
+  };
   ok.textContent = '✓'; ok.setAttribute('aria-label', 'Done');
   ok.onclick = () => { saveRecs(); box.remove(); };
-  box.append(slider, out, makeRowPlay(r), ok);
+  box.append(slider, out, revert, makeRowPlay(r), ok);
   li.append(box);
   repaintRowPlay();
   slider.focus();
@@ -610,10 +622,11 @@ function buildRecsList() {
   list.replaceChildren(...allRecs().map((r) => {
     const li = h('li'), nm = h('div', 'nm'), sub = h('div', 'sub'), grip = h('button', 'grip'), del = h('button', 'del');
     li.dataset.id = r.id;
-    const chip = h('button', 'chip', `Max ${core.maxVelocity(r, gainOf(r))}`);
+    const chip = h('button', 'chip');
+    setChip(chip, core.maxVelocity(r, gainOf(r)));
     chip.setAttribute('aria-label', `Adjust loudness of ${r.name}`);
     chip.onclick = () => openAdjust(li, r, chip);
-    sub.append(h('small', '', core.fmtDuration(core.recordingMs(r))), chip);
+    sub.append(h('small', '', core.fmtDuration(core.recordingMs(r))));
     nm.append(h('span', '', r.name), sub);
     grip.innerHTML = GRIP; grip.setAttribute('aria-label', `Move ${r.name}`);
     del.innerHTML = TRASH; del.setAttribute('aria-label', `Delete ${r.name}`);
@@ -646,7 +659,7 @@ function buildRecsList() {
       };
       grip.onpointerup = grip.onpointercancel = done;
     });
-    li.append(grip, nm, makeRowPlay(r), del);
+    li.append(grip, nm, chip, makeRowPlay(r), del);
     return li;
   }));
   repaintRowPlay();
