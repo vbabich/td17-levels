@@ -330,7 +330,9 @@ export function sanitizeRecording(r) {
 const hit = (t, pad, v, which = 0) => ({ t: Math.round(t), n: NOTE_MAP[pad][which], v });
 
 export function seedBaDumTss() {
-  const events = [hit(0, 'Snare', 96), hit(230, 'Kick', 110), hit(520, 'Crash 1', 118), hit(520, 'Kick', 100)];
+  // The classic rimshot: "ba-dum" is two quick hits close together (floor tom, then an accented snare),
+  // then a beat of silence, then "tss": crash and kick together.
+  const events = [hit(0, 'Tom 3', 98), hit(170, 'Snare', 120), hit(700, 'Crash 1', 124), hit(700, 'Kick', 112)];
   return { id: 'seed-ba-dum-tss', name: 'Ba-dum-tss', created: 2, seed: true, channel: DRUM_CHANNEL, events };
 }
 
