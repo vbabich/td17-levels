@@ -182,13 +182,19 @@ export const NOTE_MAP = {
   'Ride': [51, 59, 53],
   'Aux': [27, 28],
 };
-export const padOfNote = (note) => Object.keys(NOTE_MAP).find((p) => NOTE_MAP[p].includes(note)) ?? null;
+const PAD_OF_NOTE = new Map(Object.entries(NOTE_MAP).flatMap(([pad, notes]) => notes.map((n) => [n, pad])));
+export const padOfNote = (note) => PAD_OF_NOTE.get(note) ?? null;
 
 // What a note on a pad hits, for the highlight in the app: the pad (index in td.GROUPS), the zone
 // (index in pad.zones) or, for cross-stick and the chick of the hi-hat pedal, the pad's extra value.
 // Head/bow = zone 0, rim/edge = 1, bell = 2.
 const ZONE_OF = { 'Snare': [0, 1], 'Tom 1': [0, 1], 'Tom 2': [0, 1], 'Tom 3': [0, 1], 'Hi-Hat': [0, 0, 0, 1, 1], 'Crash 1': [0, 1], 'Crash 2': [0, 1], 'Ride': [0, 1, 2] };
+const TARGETS = new Map();
 export function noteTarget(note) {
+  if (!TARGETS.has(note)) TARGETS.set(note, computeTarget(note));
+  return TARGETS.get(note);
+}
+function computeTarget(note) {
   const name = padOfNote(note);
   if (!name) return null;
   const pad = td.GROUPS.findIndex((g) => g.name === name);
@@ -202,6 +208,9 @@ export const HAT_CC = 4;          // hi-hat control pedal position
 export const DRUM_CHANNEL = 9;    // MIDI channel 10, zero-based
 export const NOTE_MS = 60;        // replayed notes are held this long
 export const MAX_EVENTS = 4000;   // one recording stops itself here
+export const WARN_EVENTS = 3600;  // and warns from here (90%)
+export const PEDAL_GAP_MS = 30;   // pedal position changes closer than this ...
+export const PEDAL_STEP = 3;      // ... and smaller than this are thinned out (the last one is always kept)
 export const MAX_SAVED = 30;      // user recordings kept on the phone
 
 // One short channel message (Note On, Note Off, CC) as a BLE-MIDI packet.
@@ -215,18 +224,31 @@ export function bleEncodeShort(msg, timestampMs = 0) {
 export function createRecorder(now) {
   const t0 = now();
   const events = [];
-  let channel = null;
+  let channel = null, lastPedal = null, pending = null;
+  // A thinned-out pedal position is kept as `pending` and written before the next note (or at the end),
+  // so the pedal's resting position is never lost.
+  const flush = () => { if (pending) { events.push({ t: pending.t, cc: HAT_CC, v: pending.v }); lastPedal = pending; pending = null; } };
   const rec = {
     get count() { return events.length; },
     get full() { return events.length >= MAX_EVENTS; },
     note(ch, n, v) {
       if (!v || rec.full) return;
+      flush();
       channel ??= ch;
       events.push({ t: now() - t0, n, v });
     },
-    pedal(v) { if (!rec.full) events.push({ t: now() - t0, cc: HAT_CC, v }); },
+    pedal(v) {
+      if (rec.full) return;
+      const t = now() - t0;
+      if (lastPedal && v === lastPedal.v) { pending = null; return; }
+      if (lastPedal && t - lastPedal.t < PEDAL_GAP_MS && Math.abs(v - lastPedal.v) < PEDAL_STEP) { pending = { t, v }; return; }
+      pending = null;
+      lastPedal = { t, v };
+      events.push({ t, cc: HAT_CC, v });
+    },
     // Events from the first note on (the last pedal position before it is kept at 0), or null.
     finish() {
+      flush();
       const first = events.find((e) => e.n != null);
       if (!first) return null;
       const lead = events.filter((e) => e.cc != null && e.t < first.t).pop();
@@ -264,12 +286,14 @@ export function gainForMax(rec, target) {
 export function playbackMessages(rec, gain = 1) {
   const ch = rec.channel ?? DRUM_CHANNEL;
   const out = [];
-  rec.events.forEach((e, i) => {
-    if (e.cc != null) { out.push({ t: e.t, rank: 1, bytes: [0xb0 | ch, e.cc, e.v] }); return; }
-    const next = rec.events.slice(i + 1).find((x) => x.n === e.n);
-    const off = Math.max(e.t + 1, Math.min(e.t + NOTE_MS, next ? next.t : Infinity));
+  const nextOn = new Map(); // note -> time of its next Note On, found by walking backwards: one pass
+  for (let i = rec.events.length - 1; i >= 0; i--) {
+    const e = rec.events[i];
+    if (e.cc != null) { out.push({ t: e.t, rank: 1, bytes: [0xb0 | ch, e.cc, e.v] }); continue; }
+    const off = Math.max(e.t + 1, Math.min(e.t + NOTE_MS, nextOn.get(e.n) ?? Infinity));
     out.push({ t: e.t, rank: 2, bytes: [0x90 | ch, e.n, scaleVelocity(e.v, gain)] }, { t: off, rank: 0, bytes: [0x80 | ch, e.n, 0] });
-  });
+    nextOn.set(e.n, e.t);
+  }
   return out.sort((a, b) => a.t - b.t || a.rank - b.rank).map(({ t, bytes }) => ({ t, bytes }));
 }
 
@@ -291,7 +315,7 @@ export function createPlayer({ send, now, setTimer = setTimeout, clearTimer = cl
     pos = now() - t0;
     while (i < queue.length && queue[i].t <= pos + lookMs) fire(queue[i++].bytes);
     if (i >= queue.length) end();
-    else timer = setTimer(tick, tickMs);
+    else timer = setTimer(tick, Math.max(1, Math.min(tickMs * 5, Math.floor(queue[i].t - pos - lookMs)))); // sleep until the next note is due (at most 50 ms)
   };
   return {
     get playing() { return playing; },

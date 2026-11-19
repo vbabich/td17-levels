@@ -350,3 +350,32 @@ test('MIDI import: type 1 merges tracks, odd notes are counted, bad files are re
   assert.throws(() => core.parseMidiFile(smf(0, 0x8000 | 25, [t2])), /Time-code/);
   assert.throws(() => core.parseMidiFile(smf(0, 480, [[0, 0x99, 38]])), /damaged/);
 });
+
+test('pedal thinning keeps the shape and always the last position', () => {
+  let t = 0;
+  const r = core.createRecorder(() => t);
+  r.note(9, 38, 100);
+  for (let v = 0; v <= 100; v++) { t = 10 + v * 2; r.pedal(v); } // a fast sweep, 1 step per 2 ms
+  t = 400; r.pedal(100); // same value again: dropped
+  t = 500; r.note(9, 42, 90);
+  const out = r.finish().events;
+  const cc = out.filter((e) => e.cc != null);
+  assert.ok(cc.length < 40, `${cc.length} pedal events`);
+  assert.equal(cc[cc.length - 1].v, 100); // the resting position survived
+  assert.equal(cc[0].v, 0);
+  for (let i = 1; i < out.length; i++) assert.ok(out[i].t >= out[i - 1].t); // still in order
+  // a slow movement is not thinned
+  t = 0; const s = core.createRecorder(() => t);
+  s.note(9, 38, 100);
+  for (let k = 1; k <= 5; k++) { t = k * 100; s.pedal(k * 2); }
+  assert.equal(s.finish().events.filter((e) => e.cc != null).length, 5);
+});
+
+test('playbackMessages stays fast on a full recording', () => {
+  const events = [];
+  for (let i = 0; i < core.MAX_EVENTS; i++) events.push({ t: i * 5, n: [36, 38, 42][i % 3], v: 90 });
+  const start = performance.now();
+  const msgs = core.playbackMessages({ channel: 9, events });
+  assert.equal(msgs.length, 2 * core.MAX_EVENTS);
+  assert.ok(performance.now() - start < 100);
+});

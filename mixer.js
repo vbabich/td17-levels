@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=9';
+import * as core from './mixer-core.js?v=10';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -126,7 +126,8 @@ function onMidi(msg) {
     const type = msg[0] & 0xf0;
     if (type === 0x90 && msg[2] > 0) recorder.note(msg[0] & 15, msg[1], msg[2]);
     else if (type === 0xb0 && msg[1] === core.HAT_CC) recorder.pedal(msg[2]);
-    if (recorder.full) stopRecording();
+    if (recorder.full) stopRecording(true);
+    else if (!recWarned && recorder.count >= core.WARN_EVENTS) { recWarned = true; toast('Recording is almost full. It will stop soon.', 6000); }
   }
   if ((msg[0] & 0xf0) === 0xc0) { kitSignal(null); return; } // Program Change: the kit was switched
   if (msg[0] !== 0xf0 || solicited) return;
@@ -511,6 +512,7 @@ const LAST_KEY = 'td17-mixer-last-played';
 const PREFS_KEY = 'td17-mixer-recording-prefs';
 const LONG_PRESS_MS = 500;
 let recorder = null;       // while recording
+let recWarned = false;
 let userRecs = [];         // recorded on this phone
 let lastPlayed = null;     // { id, at }
 let playingId = null, playingRec = null;
@@ -522,14 +524,20 @@ try {
 let prefs = { order: [], gains: {} }; // the list's order (seeds included) and each recording's loudness factor
 try { prefs = core.sanitizePrefs(JSON.parse(localStorage.getItem(PREFS_KEY) ?? 'null')); } catch { /* defaults */ }
 const gainOf = (rec) => prefs.gains[rec.id] ?? 1;
-const allRecs = () => core.reorder([...userRecs, ...core.seedRecordings()], prefs.order);
+const SEEDS = core.seedRecordings(); // fixed, so built once
+const allRecs = () => core.reorder([...userRecs, ...SEEDS], prefs.order);
 // The Play list: the user's recordings in their own order (new ones go on top), then the built-in ones.
-function saveRecs() {
+// The recordings can be large (about 100 KB each), so they are written only when they change. The small
+// things that change often (last played, order, loudness) are written on their own.
+function savePrefs() {
   try {
-    localStorage.setItem(RECS_KEY, JSON.stringify(userRecs));
     localStorage.setItem(LAST_KEY, JSON.stringify(lastPlayed));
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-  } catch (e) { console.warn('Could not save recordings:', e.message); }
+  } catch (e) { console.warn('Could not save settings:', e.message); }
+}
+function saveRecs() {
+  try { localStorage.setItem(RECS_KEY, JSON.stringify(userRecs)); } catch (e) { console.warn('Could not save recordings:', e.message); }
+  savePrefs();
 }
 
 const player = core.createPlayer({
@@ -541,12 +549,12 @@ const player = core.createPlayer({
 });
 
 let toastTimer = 0;
-function toast(text) {
+function toast(text, ms = 2200) {
   const t = $('toast');
   t.textContent = text;
   t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 function repaintRecPlay() {
@@ -562,14 +570,18 @@ function repaintRecPlay() {
 }
 
 // The ring on Stop: how much of the recording has played.
-let playStart = 0, playMs = 1, ringFrame = 0;
+let playMs = 1, ringFrame = 0;
+let lastOffset = '';
 function drawRing() {
   ringFrame = 0;
-  if (!player.playing) { $('ringFill').style.strokeDashoffset = ''; return; }
-  const done = Math.min(1, (performance.now() - playStart) / playMs);
-  const offset = String(113.1 * (1 - done));
-  $('ringFill').style.strokeDashoffset = offset;
-  for (const f of document.querySelectorAll('.rowplay[data-state=on] .ring circle + circle')) f.style.strokeDashoffset = offset;
+  if (!player.playing) { lastOffset = ''; $('ringFill').style.strokeDashoffset = ''; return; }
+  const done = Math.min(1, player.position / playMs);
+  const offset = (113.1 * (1 - done)).toFixed(1);
+  if (offset !== lastOffset) { // the style is touched only when the ring really moved
+    lastOffset = offset;
+    $('ringFill').style.strokeDashoffset = offset;
+    for (const f of list.querySelectorAll('.rowplay[data-state=on] .ring circle + circle')) f.style.strokeDashoffset = offset;
+  }
   ringFrame = requestAnimationFrame(drawRing);
 }
 
@@ -579,8 +591,7 @@ function playRecording(rec) {
   stopPlayback(); // the previous recording's Note Offs go out first; its end resets playingId
   playingId = rec.id;
   lastPlayed = { id: rec.id, at: Date.now() };
-  saveRecs();
-  playStart = performance.now();
+  savePrefs();
   playMs = core.recordingMs(rec);
   playingRec = rec;
   player.play(core.playbackMessages(rec));
@@ -594,9 +605,10 @@ function startRecording() {
   stopPlayback();
   closeMenu();
   recorder = core.createRecorder(() => performance.now());
+  recWarned = false;
   repaintRecPlay();
 }
-function stopRecording() {
+function stopRecording(full = false) {
   if (!recorder) return;
   const done = recorder.finish();
   recorder = null;
@@ -606,7 +618,7 @@ function stopRecording() {
     userRecs = [rec, ...userRecs].slice(0, core.MAX_SAVED);
     prefs.order = [rec.id, ...prefs.order];
     saveRecs();
-    toast(`Saved ${rec.name} (${core.fmtDuration(core.recordingMs(rec))})`);
+    toast(`${full ? 'Recording full. Saved' : 'Saved'} ${rec.name} (${core.fmtDuration(core.recordingMs(rec))})`, full ? 5000 : 2200);
   } else toast('Nothing recorded');
   repaintRecPlay();
 }
@@ -628,7 +640,7 @@ function makeRowPlay(r) {
 const setChip = (chip, n) => { chip.replaceChildren(h('small', '', 'MAX'), h('b', '', String(n))); };
 function openAdjust(li, r, chip) {
   for (const open of list.querySelectorAll('.adjust')) open.remove(); // one slider at a time; its value is already applied
-  saveRecs();
+  savePrefs();
   const box = h('div', 'adjust'), slider = h('input'), out = h('output'), ok = h('button', 'ok');
   slider.type = 'range'; slider.min = 1; slider.max = 127; slider.step = 1;
   slider.value = core.maxVelocity(r, gainOf(r));
@@ -644,16 +656,16 @@ function openAdjust(li, r, chip) {
     setChip(chip, Number(slider.value));
     revert.disabled = false;
   };
-  slider.onchange = saveRecs;
+  slider.onchange = savePrefs;
   revert.onclick = () => {
     delete prefs.gains[r.id];
     slider.value = core.maxVelocity(r);
     show(); setChip(chip, Number(slider.value));
     revert.disabled = true;
-    saveRecs();
+    savePrefs();
   };
   ok.textContent = '✓'; ok.setAttribute('aria-label', 'Done');
-  ok.onclick = () => { saveRecs(); box.remove(); };
+  ok.onclick = () => { savePrefs(); box.remove(); };
   box.append(slider, out, revert, makeRowPlay(r), ok);
   li.append(box);
   repaintRowPlay();
@@ -689,7 +701,7 @@ function buildRecsList() {
         grip.onpointermove = grip.onpointerup = grip.onpointercancel = null;
         li.classList.remove('moving');
         prefs.order = [...list.children].map((x) => x.dataset.id);
-        saveRecs();
+        savePrefs();
       };
       grip.onpointerup = grip.onpointercancel = done;
     });
