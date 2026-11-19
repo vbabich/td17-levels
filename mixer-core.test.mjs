@@ -336,7 +336,8 @@ test('MIDI import: running status, tempo changes, channel choice, trimming', () 
     96, 38, 0, // running status, vel 0 = note off, ignored
     96, 0x99, 42, 80, 0, 0xff, 0x2f, 0];
   const r = core.parseMidiFile(smf(0, 96, [tr]));
-  assert.equal(r.channel, 9); // channel 10 wins
+  assert.equal(r.channel, 9);
+  assert.equal(r.sourceChannel, 9); // channel 10 wins
   assert.deepEqual(r.events.map((e) => [e.t, e.n]), [[0, 38], [500, 36], [2500, 42]]); // 192 ticks at 60 bpm are 2000 ms
 });
 
@@ -391,4 +392,11 @@ test('a pad shows its level from the mains alone while subs and pans are still u
   snare.zones[0].sub.value = -90; snare.zones[0].sub.on = true; // the sub arrives and disagrees
   assert.deepEqual(core.padBand(snare, 'level'), [-90, -20]);
   assert.equal(core.padValue(m.pads[0], 'level'), null); // nothing read yet
+});
+
+test('a drum loop written on channel 1 is replayed on channel 10', () => {
+  const r = core.parseMidiFile(smf(0, 128, [[0, 0x90, 36, 100, 0x20, 0x80, 36, 0, 0, 0xff, 0x2f, 0]]));
+  assert.equal(r.sourceChannel, 0);
+  assert.equal(r.channel, 9);
+  assert.equal(core.playbackMessages(r)[0].bytes[0], 0x99);
 });

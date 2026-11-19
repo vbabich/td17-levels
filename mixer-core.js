@@ -439,7 +439,7 @@ export function toMidiFile(rec, { gain = 1 } = {}) {
 }
 
 // Reads a Standard MIDI File (type 0 or 1) into { channel, events, notes, unmapped, truncated }:
-// the drum channel (10 when the file has it, else the first channel with notes), tempo changes
+// the notes of one channel (10 when the file has it, else the first channel with notes), always replayed on channel 10, tempo changes
 // followed, leading silence trimmed. Throws an Error with a readable message when it cannot.
 export function parseMidiFile(bytes) {
   if (bytes.length > MAX_FILE_BYTES) throw new Error('The file is larger than 1 MB');
@@ -506,5 +506,7 @@ export function parseMidiFile(bytes) {
   const truncated = events.length > MAX_EVENTS;
   events = events.slice(0, MAX_EVENTS);
   const played = events.filter((e) => e.n != null);
-  return { channel, events, notes: played.length, unmapped: played.filter((e) => padOfNote(e.n) == null).length, truncated };
+  // The file's own channel says nothing about the module: it listens for drums on its pad channel (10 by default),
+  // so imported notes are always replayed there. Many drum loops are written on channel 1, which the module ignores.
+  return { channel: DRUM_CHANNEL, sourceChannel: channel, events, notes: played.length, unmapped: played.filter((e) => padOfNote(e.n) == null).length, truncated };
 }
