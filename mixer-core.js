@@ -249,16 +249,26 @@ export function fmtDuration(ms) {
   return `${Math.floor(s / 60)}:${pad2(s % 60)}`;
 }
 
+// Velocity scaled by `gain`, kept inside 1-127 (0 would be a Note Off).
+export const scaleVelocity = (v, gain = 1) => Math.min(127, Math.max(1, Math.round(v * gain)));
+// The loudest hit of a recording, as played with `gain`.
+export const maxVelocity = (rec, gain = 1) => Math.max(1, ...rec.events.filter((e) => e.n != null).map((e) => scaleVelocity(e.v, gain)));
+// The gain that makes the loudest hit `target` (1-127); every other hit scales by the same ratio.
+export function gainForMax(rec, target) {
+  const raw = Math.max(1, ...rec.events.filter((e) => e.n != null).map((e) => e.v));
+  return Math.min(127, Math.max(1, target)) / raw;
+}
+
 // Timed MIDI messages for a recording: [{ t, bytes }] sorted by time. Each Note On gets its Note Off
 // NOTE_MS later (sooner when the same note is struck again). Offs come before controllers before ons.
-export function playbackMessages(rec) {
+export function playbackMessages(rec, gain = 1) {
   const ch = rec.channel ?? DRUM_CHANNEL;
   const out = [];
   rec.events.forEach((e, i) => {
     if (e.cc != null) { out.push({ t: e.t, rank: 1, bytes: [0xb0 | ch, e.cc, e.v] }); return; }
     const next = rec.events.slice(i + 1).find((x) => x.n === e.n);
     const off = Math.max(e.t + 1, Math.min(e.t + NOTE_MS, next ? next.t : Infinity));
-    out.push({ t: e.t, rank: 2, bytes: [0x90 | ch, e.n, e.v] }, { t: off, rank: 0, bytes: [0x80 | ch, e.n, 0] });
+    out.push({ t: e.t, rank: 2, bytes: [0x90 | ch, e.n, scaleVelocity(e.v, gain)] }, { t: off, rank: 0, bytes: [0x80 | ch, e.n, 0] });
   });
   return out.sort((a, b) => a.t - b.t || a.rank - b.rank).map(({ t, bytes }) => ({ t, bytes }));
 }
@@ -365,4 +375,12 @@ export function reorder(items, ids) {
   const by = new Map(items.map((x) => [x.id, x]));
   const named = ids.filter((id) => by.has(id)).map((id) => by.get(id));
   return [...named, ...items.filter((x) => !ids.includes(x.id))];
+}
+
+// Settings kept beside the recordings: { order: [ids], gains: { id: factor } }.
+export function sanitizePrefs(p) {
+  const order = Array.isArray(p?.order) ? p.order.filter((x) => typeof x === 'string') : [];
+  const gains = {};
+  for (const [id, g] of Object.entries(p?.gains ?? {})) if (Number.isFinite(g) && g > 0 && g <= 127) gains[id] = g;
+  return { order, gains };
 }

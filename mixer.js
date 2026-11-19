@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=5';
+import * as core from './mixer-core.js?v=6';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -456,6 +456,7 @@ function paramControl(i, p) {
 // ---------- record and replay ----------
 const RECS_KEY = 'td17-mixer-recordings';
 const LAST_KEY = 'td17-mixer-last-played';
+const PREFS_KEY = 'td17-mixer-recording-prefs';
 const LONG_PRESS_MS = 500;
 let recorder = null;       // while recording
 let userRecs = [];         // recorded on this phone
@@ -466,12 +467,16 @@ try {
   const l = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null');
   if (l && typeof l.id === 'string' && Number.isFinite(l.at)) lastPlayed = l;
 } catch { /* storage unavailable or damaged: start with the seeds only */ }
-const allRecs = () => [...userRecs, ...core.seedRecordings()];
+let prefs = { order: [], gains: {} }; // the list's order (seeds included) and each recording's loudness factor
+try { prefs = core.sanitizePrefs(JSON.parse(localStorage.getItem(PREFS_KEY) ?? 'null')); } catch { /* defaults */ }
+const gainOf = (rec) => prefs.gains[rec.id] ?? 1;
+const allRecs = () => core.reorder([...userRecs, ...core.seedRecordings()], prefs.order);
 // The Play list: the user's recordings in their own order (new ones go on top), then the built-in ones.
 function saveRecs() {
   try {
     localStorage.setItem(RECS_KEY, JSON.stringify(userRecs));
     localStorage.setItem(LAST_KEY, JSON.stringify(lastPlayed));
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
   } catch (e) { console.warn('Could not save recordings:', e.message); }
 }
 
@@ -522,7 +527,7 @@ function playRecording(rec) {
   saveRecs();
   playStart = performance.now();
   playMs = core.recordingMs(rec);
-  player.play(core.playbackMessages(rec));
+  player.play(core.playbackMessages(rec, gainOf(rec)));
   if (player.playing && !ringFrame) drawRing();
   if (playingId !== rec.id && !player.playing) playingId = null;
 }
@@ -543,6 +548,7 @@ function stopRecording() {
     const created = Date.now();
     const rec = { id: `r${created}`, name: core.recordingName(new Date(created)), created, ...done };
     userRecs = [rec, ...userRecs].slice(0, core.MAX_SAVED);
+    prefs.order = [rec.id, ...prefs.order];
     saveRecs();
     toast(`Saved ${rec.name} (${core.fmtDuration(core.recordingMs(rec))})`);
   } else toast('Nothing recorded');
@@ -556,20 +562,52 @@ const GRIP = '<svg viewBox="0 0 24 24"><path d="M4 7h16v2H4zm0 4h16v2H4zm0 4h16v
 const RING = '<svg viewBox="0 0 44 44" class="ring"><circle cx="22" cy="22" r="18"/><circle cx="22" cy="22" r="18"/></svg>';
 const ROWPLAY = '<svg viewBox="0 0 24 24" class="i-play"><path d="M7 4.5v15l13-7.5z"/></svg><svg viewBox="0 0 24 24" class="i-stop"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>' + RING;
 const TRASH = '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+function makeRowPlay(r) {
+  const play = h('button', 'rowplay');
+  play.innerHTML = ROWPLAY;
+  play.onclick = () => (player.playing && playingId === r.id ? stopPlayback() : playRecording(r));
+  return play;
+}
+// The velocity slider covers its row (nothing around it moves) and leaves Play within reach.
+function openAdjust(li, r, chip) {
+  const box = h('div', 'adjust'), slider = h('input'), out = h('output'), ok = h('button', 'ok');
+  slider.type = 'range'; slider.min = 1; slider.max = 127; slider.step = 1;
+  slider.value = core.maxVelocity(r, gainOf(r));
+  slider.setAttribute('aria-label', `Loudest hit of ${r.name}`);
+  const show = () => { out.textContent = slider.value; };
+  show();
+  slider.oninput = () => {
+    show();
+    prefs.gains[r.id] = core.gainForMax(r, Number(slider.value));
+    chip.textContent = `Max ${slider.value}`;
+  };
+  slider.onchange = saveRecs;
+  ok.textContent = '✓'; ok.setAttribute('aria-label', 'Done');
+  ok.onclick = () => { saveRecs(); box.remove(); };
+  box.append(slider, out, makeRowPlay(r), ok);
+  li.append(box);
+  repaintRowPlay();
+  slider.focus();
+}
 function buildRecsList() {
-  $('recsEmpty').hidden = userRecs.length > 0;
-  list.replaceChildren(...userRecs.map((r) => {
-    const li = h('li'), nm = h('div', 'nm'), grip = h('button', 'grip'), del = h('button', 'del'), play = h('button', 'rowplay');
+  $('recsEmpty').hidden = true;
+  list.replaceChildren(...allRecs().map((r) => {
+    const li = h('li'), nm = h('div', 'nm'), sub = h('div', 'sub'), grip = h('button', 'grip'), del = h('button', 'del');
     li.dataset.id = r.id;
-    nm.append(h('span', '', r.name), h('small', '', core.fmtDuration(core.recordingMs(r))));
+    const chip = h('button', 'chip', `Max ${core.maxVelocity(r, gainOf(r))}`);
+    chip.setAttribute('aria-label', `Adjust loudness of ${r.name}`);
+    chip.onclick = () => openAdjust(li, r, chip);
+    sub.append(h('small', '', core.fmtDuration(core.recordingMs(r))), chip);
+    nm.append(h('span', '', r.name), sub);
     grip.innerHTML = GRIP; grip.setAttribute('aria-label', `Move ${r.name}`);
-    play.innerHTML = ROWPLAY;
-    play.onclick = () => (player.playing && playingId === r.id ? stopPlayback() : playRecording(r));
     del.innerHTML = TRASH; del.setAttribute('aria-label', `Delete ${r.name}`);
+    del.disabled = Boolean(r.seed); // the built-in recordings stay
     del.onclick = async () => {
       const yes = await ask('Delete this recording?', `${r.name} (${core.fmtDuration(core.recordingMs(r))}) will be removed from this phone. This cannot be undone.`, 'Delete');
       if (!yes) return;
       userRecs = userRecs.filter((x) => x.id !== r.id);
+      prefs.order = prefs.order.filter((x) => x !== r.id);
+      delete prefs.gains[r.id];
       saveRecs();
       buildRecsList();
     };
@@ -587,12 +625,12 @@ function buildRecsList() {
       const done = () => {
         grip.onpointermove = grip.onpointerup = grip.onpointercancel = null;
         li.classList.remove('moving');
-        userRecs = core.reorder(userRecs, [...list.children].map((x) => x.dataset.id));
+        prefs.order = [...list.children].map((x) => x.dataset.id);
         saveRecs();
       };
       grip.onpointerup = grip.onpointercancel = done;
     });
-    li.append(grip, nm, play, del);
+    li.append(grip, nm, makeRowPlay(r), del);
     return li;
   }));
   repaintRowPlay();
@@ -600,8 +638,8 @@ function buildRecsList() {
 // Play/Stop buttons in the list follow the same state as the top bar.
 function repaintRowPlay() {
   const ready = S.conn === 'connected' && S.loaded >= core.PAD_COUNT;
-  for (const li of list.children) {
-    const b = li.querySelector('.rowplay'), on = player.playing && playingId === li.dataset.id;
+  for (const b of list.querySelectorAll('.rowplay')) {
+    const on = player.playing && playingId === b.closest('li').dataset.id;
     b.dataset.state = on ? 'on' : 'off';
     b.disabled = !on && (Boolean(recorder) || !ready);
     b.setAttribute('aria-label', on ? 'Stop' : 'Play');

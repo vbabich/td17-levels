@@ -272,3 +272,21 @@ test('reorder follows the given ids and keeps unnamed items', () => {
   assert.deepEqual(core.reorder(items, ['c', 'a', 'b']).map((x) => x.id), ['c', 'a', 'b']);
   assert.deepEqual(core.reorder(items, ['b', 'zzz']).map((x) => x.id), ['b', 'a', 'c']);
 });
+
+test('velocity adjustment scales proportionally and never clips', () => {
+  const rec = { channel: 9, events: [{ t: 0, n: 38, v: 100 }, { t: 100, n: 36, v: 50 }, { t: 200, n: 42, v: 20 }] };
+  assert.equal(core.maxVelocity(rec), 100);
+  const g = core.gainForMax(rec, 127);
+  assert.equal(core.maxVelocity(rec, g), 127);
+  const vel = core.playbackMessages(rec, g).filter((m) => m.bytes[0] >> 4 === 9).map((m) => m.bytes[2]);
+  assert.deepEqual(vel, [127, 64, 25]); // 100:50:20 kept (rounded)
+  assert.deepEqual(core.playbackMessages(rec, core.gainForMax(rec, 1)).filter((m) => m.bytes[0] >> 4 === 9).map((m) => m.bytes[2]), [1, 1, 1]);
+  assert.equal(core.playbackMessages(rec).filter((m) => m.bytes[0] >> 4 === 9)[1].bytes[2], 50);
+  const withPedal = { channel: 9, events: [{ t: 0, cc: 4, v: 90 }, { t: 0, n: 38, v: 100 }] };
+  assert.equal(core.playbackMessages(withPedal, 0.5)[0].bytes[2], 90); // the pedal is not scaled
+});
+
+test('prefs are validated', () => {
+  assert.deepEqual(core.sanitizePrefs(null), { order: [], gains: {} });
+  assert.deepEqual(core.sanitizePrefs({ order: ['a', 3], gains: { a: 0.5, b: 'x', c: -1 } }), { order: ['a'], gains: { a: 0.5 } });
+});
