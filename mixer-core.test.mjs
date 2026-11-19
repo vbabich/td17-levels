@@ -266,3 +266,9 @@ test('a hit maps to the pad, zone or extra value it edits', () => {
   assert.equal(core.noteTarget(1), null);
   for (const notes of Object.values(core.NOTE_MAP)) for (const n of notes) assert.ok(core.noteTarget(n));
 });
+
+test('reorder follows the given ids and keeps unnamed items', () => {
+  const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  assert.deepEqual(core.reorder(items, ['c', 'a', 'b']).map((x) => x.id), ['c', 'a', 'b']);
+  assert.deepEqual(core.reorder(items, ['b', 'zzz']).map((x) => x.id), ['b', 'a', 'c']);
+});

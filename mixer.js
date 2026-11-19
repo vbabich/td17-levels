@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=3';
+import * as core from './mixer-core.js?v=4';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -466,7 +466,8 @@ try {
   const l = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null');
   if (l && typeof l.id === 'string' && Number.isFinite(l.at)) lastPlayed = l;
 } catch { /* storage unavailable or damaged: start with the seeds only */ }
-const allRecs = () => [...core.seedRecordings(), ...userRecs].sort((a, b) => b.created - a.created);
+const allRecs = () => [...userRecs, ...core.seedRecordings()];
+// The Play list: the user's recordings in their own order (new ones go on top), then the built-in ones.
 function saveRecs() {
   try {
     localStorage.setItem(RECS_KEY, JSON.stringify(userRecs));
@@ -545,6 +546,52 @@ function stopRecording() {
   repaintRecPlay();
 }
 $('rec').onclick = () => (recorder ? stopRecording() : startRecording());
+
+// ---------- the cog: reorder and delete the user's recordings ----------
+const panel = $('recsPanel'), list = $('recsList');
+const GRIP = '<svg viewBox="0 0 24 24"><path d="M4 7h16v2H4zm0 4h16v2H4zm0 4h16v2H4z"/></svg>';
+const TRASH = '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+function buildRecsList() {
+  $('recsEmpty').hidden = userRecs.length > 0;
+  list.replaceChildren(...userRecs.map((r) => {
+    const li = h('li'), nm = h('div', 'nm'), grip = h('button', 'grip'), del = h('button', 'del');
+    li.dataset.id = r.id;
+    nm.append(h('span', '', r.name), h('small', '', core.fmtDuration(core.recordingMs(r))));
+    grip.innerHTML = GRIP; grip.setAttribute('aria-label', `Move ${r.name}`);
+    del.innerHTML = TRASH; del.setAttribute('aria-label', `Delete ${r.name}`);
+    del.onclick = async () => {
+      const yes = await ask('Delete this recording?', `${r.name} (${core.fmtDuration(core.recordingMs(r))}) will be removed from this phone. This cannot be undone.`, 'Delete');
+      if (!yes) return;
+      userRecs = userRecs.filter((x) => x.id !== r.id);
+      saveRecs();
+      buildRecsList();
+    };
+    // Drag the handle: the row follows the finger by swapping places with its neighbours.
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      try { grip.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+      li.classList.add('moving');
+      grip.onpointermove = (m) => {
+        const box = list.getBoundingClientRect();
+        if (m.clientY < box.top + 24) list.scrollTop -= 10; else if (m.clientY > box.bottom - 24) list.scrollTop += 10;
+        const next = [...list.children].find((x) => x !== li && m.clientY < x.getBoundingClientRect().top + x.offsetHeight / 2);
+        if (next) { if (li.nextSibling !== next) list.insertBefore(li, next); } else list.append(li);
+      };
+      const done = () => {
+        grip.onpointermove = grip.onpointerup = grip.onpointercancel = null;
+        li.classList.remove('moving');
+        userRecs = core.reorder(userRecs, [...list.children].map((x) => x.dataset.id));
+        saveRecs();
+      };
+      grip.onpointerup = grip.onpointercancel = done;
+    });
+    li.append(grip, nm, del);
+    return li;
+  }));
+}
+$('cog').onclick = () => { closeMenu(); buildRecsList(); panel.showModal(); };
+$('recsClose').onclick = () => panel.close();
+panel.addEventListener('click', (e) => { if (e.target === panel) panel.close(); });
 
 // Play: a quick press plays (or stops); a long press lists the recordings.
 const menu = $('menu');

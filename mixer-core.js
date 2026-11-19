@@ -357,3 +357,10 @@ export function seedFill() {
   return { id: 'seed-fill', name: 'Drum fill', created: 1, seed: true, channel: DRUM_CHANNEL, events: ev };
 }
 export const seedRecordings = () => [seedBaDumTss(), seedFill()];
+
+// `items` in the order of `ids`; anything not named keeps its place at the end.
+export function reorder(items, ids) {
+  const by = new Map(items.map((x) => [x.id, x]));
+  const named = ids.filter((id) => by.has(id)).map((id) => by.get(id));
+  return [...named, ...items.filter((x) => !ids.includes(x.id))];
+}
