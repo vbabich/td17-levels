@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=8';
+import * as core from './mixer-core.js?v=9';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -617,7 +617,7 @@ const panel = $('recsPanel'), list = $('recsList');
 const GRIP = '<svg viewBox="0 0 24 24"><path d="M4 7h16v2H4zm0 4h16v2H4zm0 4h16v2H4z"/></svg>';
 const RING = '<svg viewBox="0 0 44 44" class="ring"><circle cx="22" cy="22" r="18"/><circle cx="22" cy="22" r="18"/></svg>';
 const ROWPLAY = '<svg viewBox="0 0 24 24" class="i-play"><path d="M7 4.5v15l13-7.5z"/></svg><svg viewBox="0 0 24 24" class="i-stop"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>' + RING;
-const TRASH = '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+const DOTS = '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
 function makeRowPlay(r) {
   const play = h('button', 'rowplay');
   play.innerHTML = ROWPLAY;
@@ -660,7 +660,7 @@ function openAdjust(li, r, chip) {
 function buildRecsList() {
   $('recsEmpty').hidden = true;
   list.replaceChildren(...allRecs().map((r) => {
-    const li = h('li'), nm = h('div', 'nm'), sub = h('div', 'sub'), grip = h('button', 'grip'), del = h('button', 'del');
+    const li = h('li'), nm = h('div', 'nm'), sub = h('div', 'sub'), grip = h('button', 'grip'), more = h('button', 'more');
     li.dataset.id = r.id;
     const chip = h('button', 'chip');
     setChip(chip, core.maxVelocity(r, gainOf(r)));
@@ -669,17 +669,9 @@ function buildRecsList() {
     sub.append(h('small', '', core.fmtDuration(core.recordingMs(r))));
     nm.append(h('span', '', r.name), sub);
     grip.innerHTML = GRIP; grip.setAttribute('aria-label', `Move ${r.name}`);
-    del.innerHTML = TRASH; del.setAttribute('aria-label', `Delete ${r.name}`);
-    del.disabled = Boolean(r.seed); // the built-in recordings stay
-    del.onclick = async () => {
-      const yes = await ask('Delete this recording?', `${r.name} (${core.fmtDuration(core.recordingMs(r))}) will be removed from this phone. This cannot be undone.`, 'Delete');
-      if (!yes) return;
-      userRecs = userRecs.filter((x) => x.id !== r.id);
-      prefs.order = prefs.order.filter((x) => x !== r.id);
-      delete prefs.gains[r.id];
-      saveRecs();
-      buildRecsList();
-    };
+    more.innerHTML = DOTS; more.setAttribute('aria-label', `More for ${r.name}`);
+    more.setAttribute('aria-haspopup', 'menu');
+    more.onclick = (e) => { e.stopPropagation(); openRowMenu(more, r); };
     // Drag the handle: the row follows the finger by swapping places with its neighbours.
     grip.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -699,7 +691,7 @@ function buildRecsList() {
       };
       grip.onpointerup = grip.onpointercancel = done;
     });
-    li.append(grip, nm, chip, makeRowPlay(r), del);
+    li.append(grip, nm, chip, makeRowPlay(r), more);
     return li;
   }));
   repaintRowPlay();
@@ -715,7 +707,69 @@ function repaintRowPlay() {
     if (!on) b.querySelector('.ring circle + circle').style.strokeDashoffset = '';
   }
 }
-$('cog').onclick = () => { closeMenu(); buildRecsList(); panel.showModal(); };
+// ---------- the row's three-dot menu: export and delete ----------
+const rowMenu = $('rowMenu');
+let rowMenuRec = null;
+const closeRowMenu = () => { rowMenu.hidden = true; rowMenuRec = null; };
+function openRowMenu(button, r) {
+  rowMenuRec = r;
+  rowMenu.querySelector('[data-act=delete]').disabled = Boolean(r.seed); // the built-in recordings stay
+  rowMenu.hidden = false;
+  const b = button.getBoundingClientRect(), mh = rowMenu.offsetHeight;
+  rowMenu.style.right = `${Math.max(8, innerWidth - b.right)}px`;
+  rowMenu.style.top = `${b.bottom + 2 + mh > innerHeight ? Math.max(8, b.top - 2 - mh) : b.bottom + 2}px`;
+}
+async function exportRecording(r) {
+  const bytes = core.toMidiFile(r, { gain: gainOf(r) });
+  const file = new File([bytes], `${r.name.replace(/[^\w\- ]+/g, '-').trim() || 'recording'}.mid`, { type: 'audio/midi' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: r.name }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; /* otherwise fall back to a download */ }
+  const url = URL.createObjectURL(file), a = h('a');
+  a.href = url; a.download = file.name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+rowMenu.addEventListener('click', async (e) => {
+  const act = e.target.closest('button')?.dataset.act, r = rowMenuRec;
+  closeRowMenu();
+  if (!act || !r) return;
+  if (act === 'export') { exportRecording(r); return; }
+  const yes = await ask('Delete this recording?', `${r.name} (${core.fmtDuration(core.recordingMs(r))}) will be removed from this phone. This cannot be undone.`, 'Delete');
+  if (!yes) return;
+  userRecs = userRecs.filter((x) => x.id !== r.id);
+  prefs.order = prefs.order.filter((x) => x !== r.id);
+  delete prefs.gains[r.id];
+  saveRecs();
+  buildRecsList();
+});
+document.addEventListener('pointerdown', (e) => { if (!rowMenu.hidden && !rowMenu.contains(e.target) && !e.target.closest?.('.more')) closeRowMenu(); }, true);
+list.addEventListener('scroll', closeRowMenu);
+panel.addEventListener('close', closeRowMenu);
+
+// ---------- import ----------
+function importMessage(text, bad = false) { const m = $('importMsg'); m.textContent = text; m.classList.toggle('bad', bad); }
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    if (file.size > core.MAX_FILE_BYTES) throw new Error('The file is larger than 1 MB');
+    const got = core.parseMidiFile(new Uint8Array(await file.arrayBuffer()));
+    const created = Date.now();
+    const rec = core.sanitizeRecording({ id: `r${created}`, name: file.name.replace(/\.(mid|midi)$/i, '').slice(0, 40) || core.recordingName(new Date(created)), created, channel: got.channel, events: got.events });
+    if (!rec) throw new Error('The file has no usable notes');
+    userRecs = [rec, ...userRecs].slice(0, core.MAX_SAVED);
+    prefs.order = [rec.id, ...prefs.order];
+    saveRecs();
+    buildRecsList();
+    list.scrollTop = 0;
+    importMessage(`Imported ${got.notes} notes${got.unmapped ? `, ${got.unmapped} without a pad` : ''}${got.truncated ? ', cut at the limit' : ''}`);
+  } catch (err) { importMessage(`Couldn't import: ${err.message}`, true); }
+};
+
+$('cog').onclick = () => { closeMenu(); importMessage(''); buildRecsList(); panel.showModal(); };
 // Ticking (and unticking) starts a new measurement: the stored maxima are cleared.
 $('stickyMax').onchange = (e) => { stickyMax = e.target.checked; maxByNote.clear(); renderMax(); };
 $('recsClose').onclick = () => panel.close();

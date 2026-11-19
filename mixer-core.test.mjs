@@ -309,3 +309,44 @@ test('player can change a message just before it is sent (live loudness)', () =>
   run(100); gain = 0.5; run(600);
   assert.deepEqual(sent.filter((b) => b[0] >> 4 === 9).map((b) => b[2]), [100, 50]);
 });
+
+// ---------- MIDI files and tempo ----------
+test('MIDI file round trip keeps notes, pedal and loudness', () => {
+  const rec = { name: 'Take 1', channel: 9, events: [{ t: 0, cc: 4, v: 90 }, { t: 0, n: 42, v: 80 }, { t: 500, n: 38, v: 100 }, { t: 1000, n: 36, v: 110 }] };
+  const same = core.parseMidiFile(core.toMidiFile(rec));
+  assert.equal(same.channel, 9);
+  assert.deepEqual(same.events.map((e) => [e.n, e.cc, e.v]), rec.events.map((e) => [e.n, e.cc, e.v]));
+  same.events.forEach((e, i) => assert.ok(Math.abs(e.t - rec.events[i].t) <= 1));
+  const quiet = core.parseMidiFile(core.toMidiFile(rec, { gain: 0.5 }));
+  assert.deepEqual(quiet.events.filter((e) => e.n != null).map((e) => e.v), [40, 50, 55]);
+  assert.equal(same.unmapped, 0);
+});
+
+// A hand-made file: header, one track per entry of `tracks` (byte arrays).
+const smf = (format, division, tracks) => Uint8Array.from([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, format, 0, tracks.length, division >> 8, division & 255,
+  ...tracks.flatMap((t) => [0x4d, 0x54, 0x72, 0x6b, 0, 0, 0, t.length, ...t])]);
+
+test('MIDI import: running status, tempo changes, channel choice, trimming', () => {
+  // ppq 96; first note at tick 96 (channel 1, not drums), tempo 120 bpm then 60 bpm at tick 192
+  const tr = [0, 0xff, 0x51, 3, 0x07, 0xa1, 0x20,
+    96, 0x90, 60, 100, // ch 1 note at tick 96
+    0, 0x99, 38, 90,   // ch 10 note at tick 96 too
+    96, 0xff, 0x51, 3, 0x0f, 0x42, 0x40, // tempo 1,000,000 us at tick 192
+    0, 0x99, 36, 0x70, // note at tick 192
+    96, 38, 0, // running status, vel 0 = note off, ignored
+    96, 0x99, 42, 80, 0, 0xff, 0x2f, 0];
+  const r = core.parseMidiFile(smf(0, 96, [tr]));
+  assert.equal(r.channel, 9); // channel 10 wins
+  assert.deepEqual(r.events.map((e) => [e.t, e.n]), [[0, 38], [500, 36], [2500, 42]]); // 192 ticks at 60 bpm are 2000 ms
+});
+
+test('MIDI import: type 1 merges tracks, odd notes are counted, bad files are refused', () => {
+  const t1 = [0, 0xff, 0x51, 3, 0x07, 0xa1, 0x20, 0, 0xff, 0x2f, 0];
+  const t2 = [0, 0x99, 38, 100, 0, 0x99, 1, 50, 0, 0xff, 0x2f, 0];
+  const r = core.parseMidiFile(smf(1, 480, [t1, t2]));
+  assert.equal(r.notes, 2); assert.equal(r.unmapped, 1);
+  assert.throws(() => core.parseMidiFile(Uint8Array.from([1, 2, 3, 4])), /Not a MIDI file/);
+  assert.throws(() => core.parseMidiFile(smf(0, 480, [[0, 0xff, 0x2f, 0]])), /no notes/);
+  assert.throws(() => core.parseMidiFile(smf(0, 0x8000 | 25, [t2])), /Time-code/);
+  assert.throws(() => core.parseMidiFile(smf(0, 480, [[0, 0x99, 38]])), /damaged/);
+});

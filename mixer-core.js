@@ -277,7 +277,7 @@ export function playbackMessages(rec, gain = 1) {
 // within the next lookMs, so a late timer shifts a note by at most one tick and nothing is chained.
 // stop() sends a Note Off for every note still sounding.
 export function createPlayer({ send, now, setTimer = setTimeout, clearTimer = clearTimeout, tickMs = 10, lookMs = 5, onChange = () => {}, transform = (b) => b }) {
-  let queue = [], i = 0, t0 = 0, timer = null, playing = false;
+  let queue = [], i = 0, t0 = 0, pos = 0, timer = null, playing = false;
   const sounding = new Set();
   const fire = (bytes) => {
     const [status, n] = bytes;
@@ -288,16 +288,17 @@ export function createPlayer({ send, now, setTimer = setTimeout, clearTimer = cl
   const end = () => { clearTimer(timer); timer = null; queue = []; playing = false; onChange(); };
   const tick = () => {
     timer = null;
-    const el = now() - t0;
-    while (i < queue.length && queue[i].t <= el + lookMs) fire(queue[i++].bytes);
+    pos = now() - t0;
+    while (i < queue.length && queue[i].t <= pos + lookMs) fire(queue[i++].bytes);
     if (i >= queue.length) end();
     else timer = setTimer(tick, tickMs);
   };
   return {
     get playing() { return playing; },
+    get position() { return pos; },
     play(messages) {
       if (playing) this.stop();
-      queue = messages; i = 0; t0 = now(); playing = true;
+      queue = messages; i = 0; t0 = now(); pos = 0; playing = true;
       onChange();
       tick();
     },
@@ -383,4 +384,101 @@ export function sanitizePrefs(p) {
   const gains = {};
   for (const [id, g] of Object.entries(p?.gains ?? {})) if (Number.isFinite(g) && g > 0 && g <= 127) gains[id] = g;
   return { order, gains };
+}
+
+// ---------- Standard MIDI File: export and import ----------
+const PPQ = 480, TEMPO_US = 500000, TICKS_PER_MS = PPQ * 1000 / TEMPO_US; // 120 bpm: about one tick per millisecond
+export const MAX_FILE_BYTES = 1024 * 1024;
+export const MAX_IMPORT_MS = 10 * 60 * 1000;
+
+const vlq = (n) => {
+  const out = [n & 0x7f];
+  while ((n >>= 7) > 0) out.unshift((n & 0x7f) | 0x80);
+  return out;
+};
+const u32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+
+// A type 0 file with one track at 120 bpm. The loudness (`gain`) is baked in, so the file sounds like the app plays it.
+export function toMidiFile(rec, { gain = 1 } = {}) {
+  const name = [...rec.name].map((ch) => (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127 ? ch.charCodeAt(0) : 63)).slice(0, 60);
+  const body = [0, 0xff, 0x03, ...vlq(name.length), ...name, 0, 0xff, 0x51, 3, TEMPO_US >> 16, (TEMPO_US >> 8) & 255, TEMPO_US & 255];
+  let tick = 0;
+  for (const m of playbackMessages(rec, gain)) {
+    const at = Math.max(tick, Math.round(m.t * TICKS_PER_MS));
+    body.push(...vlq(at - tick), ...m.bytes);
+    tick = at;
+  }
+  body.push(0, 0xff, 0x2f, 0);
+  return Uint8Array.from([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, PPQ >> 8, PPQ & 255, 0x4d, 0x54, 0x72, 0x6b, ...u32(body.length), ...body]);
+}
+
+// Reads a Standard MIDI File (type 0 or 1) into { channel, events, notes, unmapped, truncated }:
+// the drum channel (10 when the file has it, else the first channel with notes), tempo changes
+// followed, leading silence trimmed. Throws an Error with a readable message when it cannot.
+export function parseMidiFile(bytes) {
+  if (bytes.length > MAX_FILE_BYTES) throw new Error('The file is larger than 1 MB');
+  let p = 0;
+  const need = (n) => { if (p + n > bytes.length) throw new Error('The file is damaged'); };
+  const u8 = () => { need(1); return bytes[p++]; };
+  const u16 = () => (u8() << 8) | u8();
+  const u32r = () => ((u8() << 24) | (u8() << 16) | (u8() << 8) | u8()) >>> 0;
+  const tag = () => String.fromCharCode(u8(), u8(), u8(), u8());
+  if (tag() !== 'MThd') throw new Error('Not a MIDI file');
+  const hlen = u32r(), format = u16(), tracks = u16(), division = u16();
+  if (format > 1) throw new Error('Only MIDI file types 0 and 1 are supported');
+  if (division & 0x8000 || !division) throw new Error('Time-code timing is not supported');
+  p = 8 + hlen;
+  const notes = [], ccs = [], tempos = [];
+  for (let k = 0; k < tracks && p < bytes.length; k++) {
+    const kind = tag(), len = u32r(), endOfTrack = p + len;
+    if (endOfTrack > bytes.length) throw new Error('The file is damaged');
+    if (kind !== 'MTrk') { p = endOfTrack; continue; }
+    let tick = 0, running = 0;
+    const readVlq = () => { let v = 0, b; do { b = u8(); v = (v << 7) | (b & 0x7f); } while (b & 0x80); return v; };
+    while (p < endOfTrack) {
+      tick += readVlq();
+      let status = u8();
+      if (status < 0x80) { if (!running) throw new Error('The file is damaged'); p--; status = running; } else if (status < 0xf0) running = status;
+      if (status === 0xff) {
+        const type = u8(), n = readVlq();
+        need(n);
+        if (type === 0x51 && n === 3) tempos.push({ tick, us: (bytes[p] << 16) | (bytes[p + 1] << 8) | bytes[p + 2] });
+        p += n;
+        if (type === 0x2f) break;
+      } else if (status === 0xf0 || status === 0xf7) {
+        const n = readVlq(); need(n); p += n;
+      } else {
+        const hi = status & 0xf0, ch = status & 15, a = u8(), b = hi === 0xc0 || hi === 0xd0 ? 0 : u8();
+        if (hi === 0x90 && b > 0) notes.push({ tick, ch, n: a, v: b });
+        else if (hi === 0xb0 && a === HAT_CC) ccs.push({ tick, ch, v: b });
+      }
+    }
+    p = endOfTrack;
+  }
+  if (!notes.length) throw new Error('The file has no notes');
+  const first = notes.reduce((x, y) => (y.tick < x.tick ? y : x));
+  const channel = notes.some((x) => x.ch === 9) ? 9 : first.ch;
+  // ticks -> ms through the tempo map
+  tempos.sort((x, y) => x.tick - y.tick);
+  const toMs = (tick) => {
+    let ms = 0, at = 0, us = 500000;
+    for (const t of tempos) {
+      if (t.tick >= tick) break;
+      ms += (t.tick - at) * us / division / 1000;
+      at = t.tick; us = t.us;
+    }
+    return ms + (tick - at) * us / division / 1000;
+  };
+  const t0 = toMs(first.tick);
+  let events = [];
+  for (const x of notes) if (x.ch === channel) events.push({ t: Math.round(toMs(x.tick) - t0), n: x.n, v: x.v });
+  const lead = ccs.filter((x) => x.ch === channel && x.tick < first.tick).pop();
+  for (const x of ccs) if (x.ch === channel && x.tick >= first.tick) events.push({ t: Math.round(toMs(x.tick) - t0), cc: HAT_CC, v: x.v });
+  events.sort((x, y) => x.t - y.t || (x.cc != null ? -1 : 0) - (y.cc != null ? -1 : 0)); // the pedal first at equal times
+  events = events.filter((e) => e.t <= MAX_IMPORT_MS);
+  if (lead) events.unshift({ t: 0, cc: HAT_CC, v: lead.v });
+  const truncated = events.length > MAX_EVENTS;
+  events = events.slice(0, MAX_EVENTS);
+  const played = events.filter((e) => e.n != null);
+  return { channel, events, notes: played.length, unmapped: played.filter((e) => padOfNote(e.n) == null).length, truncated };
 }
