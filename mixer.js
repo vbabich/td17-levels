@@ -627,6 +627,8 @@ function makeRowPlay(r) {
 // The velocity slider covers its row (nothing around it moves) and leaves Play within reach.
 const setChip = (chip, n) => { chip.replaceChildren(h('small', '', 'MAX'), h('b', '', String(n))); };
 function openAdjust(li, r, chip) {
+  for (const open of list.querySelectorAll('.adjust')) open.remove(); // one slider at a time; its value is already applied
+  saveRecs();
   const box = h('div', 'adjust'), slider = h('input'), out = h('output'), ok = h('button', 'ok');
   slider.type = 'range'; slider.min = 1; slider.max = 127; slider.step = 1;
   slider.value = core.maxVelocity(r, gainOf(r));
@@ -707,6 +709,8 @@ function repaintRowPlay() {
     if (!on) b.querySelector('.ring circle + circle').style.strokeDashoffset = '';
   }
 }
+document.addEventListener('selectstart', (e) => e.preventDefault()); // no text selection anywhere
+
 // ---------- the row's three-dot menu: export and delete ----------
 const rowMenu = $('rowMenu');
 let rowMenuRec = null;
