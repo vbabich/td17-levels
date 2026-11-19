@@ -86,23 +86,25 @@ export function layers(pad, kind) {
 
 export const captureLayers = (list, kind, read = valueOf) => td.captureBlend(list.map(read), KIND[kind].range);
 
+// Values not read yet (null) are left out, so a pad whose mains are known already has a level.
+const known = (pad, kind, read) => layers(pad, kind).filter((p) => read(p) != null);
 export function padValue(pad, kind, read = valueOf) {
-  const list = layers(pad, kind);
-  return read(list[captureLayers(list, kind, read).leader]);
+  const list = known(pad, kind, read);
+  return list.length ? read(list[captureLayers(list, kind, read).leader]) : null;
 }
 
 const spreadEntry = (p, read) => ({ kind: p.role, value: read(p), main: p.main ? read(p.main) : undefined, on: p.on });
 
 // The orange bar on a pad-wide fader: [lowest, highest], or null when everything agrees.
 export function padBand(pad, kind, read = valueOf) {
-  const band = td.spreadBand(padValue(pad, kind, read), layers(pad, kind).map((p) => spreadEntry(p, read)));
+  const band = td.spreadBand(padValue(pad, kind, read), known(pad, kind, read).map((p) => spreadEntry(p, read)));
   return band ? [band.min, band.max] : null;
 }
 
 // The individual values that make the pad disagree, by the same rules as the bar.
 export function disagreements(pad, kind, read = valueOf) {
   const leader = padValue(pad, kind, read);
-  return layers(pad, kind).filter((p) => td.spreadBand(leader, [spreadEntry(p, read)]));
+  return known(pad, kind, read).filter((p) => td.spreadBand(leader, [spreadEntry(p, read)]));
 }
 
 // Values a pad-view slider may snap to: levels snap to the other mains, subs that are on,

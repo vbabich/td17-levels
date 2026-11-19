@@ -379,3 +379,16 @@ test('playbackMessages stays fast on a full recording', () => {
   assert.equal(msgs.length, 2 * core.MAX_EVENTS);
   assert.ok(performance.now() - start < 100);
 });
+
+test('a pad shows its level from the mains alone while subs and pans are still unread', () => {
+  const m = core.createKit(11);
+  const snare = m.pads[1];
+  snare.zones[0].main.value = snare.zones[0].main.original = -20;
+  snare.zones[1].main.value = snare.zones[1].main.original = -20;
+  assert.equal(core.padValue(snare, 'level'), -20);
+  assert.equal(core.padBand(snare, 'level'), null);
+  assert.equal(core.padValue(snare, 'pan'), null);
+  snare.zones[0].sub.value = -90; snare.zones[0].sub.on = true; // the sub arrives and disagrees
+  assert.deepEqual(core.padBand(snare, 'level'), [-90, -20]);
+  assert.equal(core.padValue(m.pads[0], 'level'), null); // nothing read yet
+});

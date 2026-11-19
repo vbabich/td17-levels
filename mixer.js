@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=10';
+import * as core from './mixer-core.js?v=11';
 import { createSimModule } from './mixer-sim.js?v=2';
 
 const { KIND, valueOf, originalOf } = core;
@@ -235,15 +235,17 @@ function applyModuleMessage(d) {
 
 // Several signals can announce one kit change, and kits can be stepped through quickly.
 let kitTimer = 0;
+const KIT_SETTLE_MS = 500; // the kit wheel must rest this long before anything is read
 function kitSignal(kit) {
   clearTimeout(kitTimer);
+  if (S.conn === 'connected' && S.loaded < core.PAD_COUNT) loadSeq++; // a read in progress stops at once: no requests for a kit that is already gone
   kitTimer = setTimeout(async () => {
     if (S.conn !== 'connected') return;
     try {
       const k = kit ?? (await request(td.address.currentKit(), 1))[0];
       if (k !== S.kit || S.loaded < core.PAD_COUNT) loadKit(k);
     } catch (e) { console.warn('Kit check failed:', e.message); }
-  }, 200);
+  }, KIT_SETTLE_MS);
 }
 
 // ---------- reading a kit ----------
@@ -271,16 +273,33 @@ async function loadKit(kit = null) {
     S.model = kits.get(number);
     repaint();
     const model = S.model;
+    for (const pad of model.pads) pad.mainsRead = false;
     // The kit name is a nicety: a kit without a readable name just shows its number.
     try { model.name = core.parseKitName(await request(core.kitNameAddress(number), core.KIT_NAME_SIZE, 800)); }
     catch { alive(); }
     alive();
+    // Stage 1: the main level of every zone, so all ten rows show a level within a second or so.
+    const fresh = new Set();
+    for (const pad of model.pads) {
+      for (const z of pad.zones) {
+        const value = await readParam(z.main);
+        alive();
+        z.main.value = value;
+        z.main.original ??= value;
+        fresh.add(z.main);
+      }
+      pad.mainsRead = true;
+      repaint();
+    }
+    // Stage 2: everything else, pad by pad. Each pad unlocks when it is complete, and its numbers
+    // and discrepancy bar are redrawn with the subs, pans and extras now known.
     for (const pad of model.pads) {
       for (const z of pad.zones) {
         z.sub.on = (await request(z.sub.switchAddr, 1))[0] === 1;
         alive();
       }
       for (const p of pad.params) {
+        if (fresh.has(p)) continue;
         const value = await readParam(p);
         alive();
         p.value = value;
@@ -461,7 +480,7 @@ function padControl(i, kindOf) {
   return {
     kind,
     label: () => `${pad().name} ${kind() === 'pan' ? 'pan' : 'level'}`,
-    ready: () => Boolean(S.model) && i < S.loaded,
+    ready: () => Boolean(S.model) && (i < S.loaded || (kind() === 'level' && S.model.pads[i].mainsRead)), // the level is shown once the mains are in
     get: () => core.padValue(pad(), kind(), shown),
     orig: () => core.padValue(pad(), kind(), originalOf),
     band: () => core.padBand(pad(), kind(), shown),
@@ -901,12 +920,16 @@ function repaint() {
   $('kit').style.visibility = live ? '' : 'hidden';
   $('kitNo').textContent = S.kit == null ? 'Kit' : `Kit ${S.kit + 1}`;
   $('kitName').textContent = loading ? `Loading ${S.loaded}/${core.PAD_COUNT}…` : S.model?.name ?? '';
-  $('progress').firstChild.style.width = loading && S.conn === 'connected' ? `${S.loaded * 10}%` : '0';
+  const mains = S.model ? S.model.pads.filter((p) => p.mainsRead).length : 0;
+  $('progress').firstChild.style.width = loading && S.conn === 'connected' ? `${mains * 3 + S.loaded * 7}%` : '0'; // stage 1 is the first 30%
 
   for (const f of faders) f.paint();
   padEls.forEach(({ pad, val }, i) => {
-    const rowLoading = i >= S.loaded || !S.model;
+    const full = Boolean(S.model) && i < S.loaded;
+    const partial = !full && Boolean(S.model) && S.mode === 'level' && S.model.pads[i].mainsRead; // level only: the mains are known, the rest is still coming
+    const rowLoading = !full && !partial;
     pad.classList.toggle('loading', rowLoading);
+    pad.classList.toggle('partial', partial);
     if (rowLoading) val.textContent = '– –';
     else setValue(val, S.mode, core.padValue(S.model.pads[i], S.mode, shown));
   });
