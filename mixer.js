@@ -188,9 +188,9 @@ function allMeters() {
   return sheetParts ? list.concat(sheetParts.meters) : list;
 }
 function renderMax() { for (const m of allMeters()) paintMeter(m); }
-function showHit(note, vel) {
+function showHit(note, vel, measure = true) { // measure: false for replayed notes, which must not count as the drummer's maxima
   const t = core.noteTarget(note);
-  if (t && stickyMax && vel > (maxByNote.get(note) ?? 0)) { maxByNote.set(note, vel); renderMax(); }
+  if (t && measure && stickyMax && vel > (maxByNote.get(note) ?? 0)) { maxByNote.set(note, vel); renderMax(); }
   if (!t || !S.model || t.pad >= S.loaded) return;
   const mark = (el) => {
     el.classList.add('hit');
@@ -654,7 +654,6 @@ function paramControl(i, p) {
 const RECS_KEY = 'td17-mixer-recordings';
 const LAST_KEY = 'td17-mixer-last-played';
 const PREFS_KEY = 'td17-mixer-recording-prefs';
-const LONG_PRESS_MS = 500;
 let recorder = null;       // while recording
 let recWarned = false;
 let userRecs = [];         // recorded on this phone
@@ -685,7 +684,10 @@ function saveRecs() {
 }
 
 const player = core.createPlayer({
-  send: (bytes) => { transport?.sendShort(bytes)?.catch?.(() => {}); },
+  send: (bytes) => {
+    transport?.sendShort(bytes)?.catch?.(() => {});
+    if ((bytes[0] & 0xf0) === 0x90) showHit(bytes[1], bytes[2], false); // replayed hits show up like hits from the module
+  },
   now: () => performance.now(),
   // Loudness is applied as each note goes out, so the slider in Settings changes playback live.
   transform: (b) => ((b[0] & 0xf0) === 0x90 && playingRec ? [b[0], b[1], core.scaleVelocity(b[2], gainOf(playingRec))] : b),
@@ -957,7 +959,7 @@ $('stickyMax').onchange = (e) => { stickyMax = e.target.checked; maxByNote.clear
 $('recsClose').onclick = () => panel.close();
 panel.addEventListener('click', (e) => { if (e.target === panel) panel.close(); });
 
-// Play: a quick press plays (or stops); a long press lists the recordings.
+// Play: a press lists the recordings (tap one to play it); while playing it is Stop.
 const menu = $('menu');
 function closeMenu() { menu.hidden = true; }
 function openMenu() {
@@ -976,20 +978,15 @@ function openMenu() {
 }
 {
   const btn = $('play');
-  let holdTimer = 0, swallow = false;
+  let swallow = false;
   btn.addEventListener('pointerdown', () => {
     swallow = !menu.hidden; // a press that only closes the menu does nothing else
-    clearTimeout(holdTimer);
-    if (swallow) { closeMenu(); return; }
-    holdTimer = setTimeout(() => { swallow = true; openMenu(); buzz(20); }, LONG_PRESS_MS);
+    if (swallow) closeMenu();
   });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) btn.addEventListener(ev, () => clearTimeout(holdTimer));
-  btn.addEventListener('contextmenu', (e) => e.preventDefault());
-  btn.addEventListener('click', (e) => {
+  btn.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press does nothing
+  btn.addEventListener('click', () => {
     if (swallow) { swallow = false; return; }
-    if (player.playing) { stopPlayback(); return; }
-    const rec = core.pickQuick(allRecs(), lastPlayed);
-    if (rec) playRecording(rec);
+    if (player.playing) stopPlayback(); else openMenu();
   });
   btn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ContextMenu') { e.preventDefault(); openMenu(); menu.firstChild?.focus(); } });
   document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target) && e.target.closest?.('#play') == null) closeMenu(); });
