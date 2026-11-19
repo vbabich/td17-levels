@@ -278,8 +278,6 @@ function openKitMenu() {
     for (const e of entries) (e.isIntersecting ? kitVisible.add(Number(e.target.dataset.kit)) : kitVisible.delete(Number(e.target.dataset.kit)));
   }, { root: kitGrid, rootMargin: '120px' });
   for (let k = 0; k < core.KIT_COUNT; k++) {
-    if (k === 0) kitGrid.append(h('h3', '', 'Preset kits'));
-    if (k === core.PRESET_KITS) kitGrid.append(h('h3', '', 'User kits'));
     const b = h('button', `kititem${core.isUserKit(k) ? ' user' : ''}${k === S.kit ? ' cur' : ''}`);
     b.dataset.kit = k;
     b.append(h('small', '', `KIT ${k + 1}`), h('b'));
