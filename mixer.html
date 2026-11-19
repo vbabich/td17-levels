@@ -27,7 +27,7 @@
   body { background:var(--bg); color:var(--text); font:16px/1.3 system-ui, sans-serif; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
     height:100dvh; overflow:hidden; display:grid;
     grid-template: "top" auto "progress" 3px "main" minmax(0,1fr) "tools" auto / minmax(0,1fr);
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) calc(env(safe-area-inset-bottom) + 10px) env(safe-area-inset-left); } /* clear of the rounded screen corners */
   button { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:10px; min-height:44px; padding:0 14px; touch-action:manipulation; }
   button:disabled { opacity:.4; }
   button:focus-visible, .fader:focus-visible { outline:2px solid var(--level); outline-offset:1px; }
@@ -196,7 +196,7 @@
   .spread .band { display:block !important; }
   .tick { top:-6px; bottom:-6px; left:calc(var(--z) * 100% - 1px); width:2px; background:var(--muted); opacity:.55; border-radius:1px; }
   /* Playhead tab below the track: a rounded tab with grip lines and a point touching the track's lower edge. */
-  .thumb, .orig { --tw:30px; --th:26px; --pt:10px; --c:var(--fill);
+  .thumb, .orig { --tw:27px; --th:23px; --pt:9px; --c:var(--fill);
     left:calc(var(--p) * 100%); top:calc(100% + var(--pt) + 2px); width:var(--tw); height:var(--th); transform:translateX(-50%); border-radius:6px;
     background:linear-gradient(to right, transparent calc(50% - 7px), var(--grip) calc(50% - 7px) calc(50% - 5px), transparent calc(50% - 5px) calc(50% - 1px),
         var(--grip) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px) calc(50% + 5px), var(--grip) calc(50% + 5px) calc(50% + 7px), transparent calc(50% + 7px))
@@ -206,12 +206,12 @@
     border:solid transparent; border-width:0 calc(var(--tw) / 2 - 2px) var(--pt); border-bottom-color:var(--c); }
   .orig { display:none !important; left:calc(var(--o) * 100%); --c:var(--muted); opacity:.45; }
   .changed .orig { display:block !important; }
-  .drag .thumb { --tw:34px; --th:30px; }
+  .drag .thumb { --tw:31px; --th:27px; }
   .fine .thumb { box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
   .pad:has(.fader.fine) .val, .drow:has(.fine) output, .big:has(.fine) .lab output { color:var(--level); }
   .pad:has(.fader.fine.pan) .val, .drow:has(.fine.pan) output, .big:has(.fine.pan) .lab output { color:var(--pan); }
-  #mixer .fader, .big .fader, .pad .name, .pad .val { padding-bottom:36px; }
-  .big .ctl button { margin-bottom:36px; }
+  #mixer .fader, .big .fader, .pad .name, .pad .val { padding-bottom:33px; }
+  .big .ctl button { margin-bottom:33px; }
 
   /* ---------- not connected ---------- */
   #connect { grid-area:main; display:grid; place-content:center; justify-items:center; gap:16px; padding:24px; text-align:center; }
@@ -246,8 +246,8 @@
   .drow.off .lab { color:var(--muted); }
   .drow output { font-size:18px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; padding-right:14px; white-space:nowrap; }
   .drow output small { font-size:12px; }
-  .drow .thumb, .drow .orig { --tw:24px; --th:19px; --pt:8px; }
-  .drow .fader, .drow .lab, .drow output { padding-bottom:28px; }
+  .drow .thumb, .drow .orig { --tw:22px; --th:17px; --pt:7px; }
+  .drow .fader, .drow .lab, .drow output { padding-bottom:26px; }
   @media (orientation: landscape) {
     .sheet-body { grid-template-columns:minmax(0,1fr) minmax(0,1fr); overflow:hidden; padding:0; }
     .sheet-body > div { overflow-y:auto; overscroll-behavior:contain; padding:8px 0 16px; min-height:0; }
@@ -338,6 +338,6 @@
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=16"></script>
+<script type="module" src="mixer.js?v=17"></script>
 </body>
 </html>
