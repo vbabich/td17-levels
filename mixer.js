@@ -500,13 +500,26 @@ function repaintRecPlay() {
   play.setAttribute('aria-label', playing ? 'Stop' : 'Play');
 }
 
+// The ring on Stop: how much of the recording has played.
+let playStart = 0, playMs = 1, ringFrame = 0;
+function drawRing() {
+  ringFrame = 0;
+  if (!player.playing) { $('ringFill').style.strokeDashoffset = ''; return; }
+  const done = Math.min(1, (performance.now() - playStart) / playMs);
+  $('ringFill').style.strokeDashoffset = String(113.1 * (1 - done));
+  ringFrame = requestAnimationFrame(drawRing);
+}
+
 function playRecording(rec) {
   if (!transport || recorder) return;
   closeMenu();
   playingId = rec.id;
   lastPlayed = { id: rec.id, at: Date.now() };
   saveRecs();
+  playStart = performance.now();
+  playMs = core.recordingMs(rec);
   player.play(core.playbackMessages(rec));
+  if (player.playing && !ringFrame) drawRing();
   if (playingId !== rec.id && !player.playing) playingId = null;
 }
 function stopPlayback() { player.stop(); }
