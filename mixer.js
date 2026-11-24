@@ -1,6 +1,6 @@
 // TD-17 mixer: ten pad faders over Bluetooth MIDI. Design decisions: docs/mixer-layout.md.
 import * as td from './td17.js?v=19';
-import * as core from './mixer-core.js?v=16';
+import * as core from './mixer-core.js?v=19';
 import { createSimModule } from './mixer-sim.js?v=3';
 
 const { KIND, valueOf, originalOf } = core;
@@ -11,9 +11,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const SIM = new URLSearchParams(location.search).has('sim');
 const MIN_GAP_MS = 20;   // Roland: leave at least 20 ms between DT1 messages
-const MAX_RETRIES = 3;
 const PAIR_WAIT_MS = 15000; // how long to wait for the phone's pairing dialogs to be answered
-const STABLE_MS = 30000; // a link up this long starts with a fresh set of retries
 const MESSAGE_KEY = 'td17-mixer-message';
 
 // ---------- state ----------
@@ -27,6 +25,7 @@ const S = {
   busy: false,          // Compare or Restore is writing
   open: null,           // pad shown in the pad view
   attempt: 0,
+  maxTries: 1,
   loadError: false,
   pairing: false,       // waiting for the phone's pairing dialogs
   notice: '',
@@ -1064,7 +1063,7 @@ function repaint() {
   $('compare').setAttribute('aria-pressed', S.comparing);
   $('compare').textContent = S.comparing ? 'Original' : 'Compare';
 
-  if (S.conn === 'reconnecting') setBanner('warn', `Reconnecting… (try ${S.attempt} of ${MAX_RETRIES})`, 'Stop', stopLink);
+  if (S.conn === 'reconnecting') setBanner('warn', `Reconnecting… (try ${S.attempt} of ${S.maxTries})`, 'Stop', stopLink);
   else if (S.loadError) setBanner('warn', 'Could not read this kit', 'Retry', () => loadKit());
   else if (S.comparing && S.conn === 'connected') setBanner('info', 'Showing original values', 'Back to mine', toggleCompare, S.busy);
   else if (S.notice && S.conn === 'connected') setBanner('warn', S.notice, 'OK', clearNotice);
@@ -1250,85 +1249,201 @@ async function updateWakeLock() {
 }
 document.addEventListener('visibilitychange', updateWakeLock);
 
+// ---------- connection log ----------
+// Every connection step with its time, kept across reloads (sessionStorage) so a hardware test shows which path ran.
+// Press and hold the connection status at the top to read and copy it.
+const LOG_KEY = 'td17-mixer-connlog';
+const RECOVER_KEY = 'td17-mixer-recover';
+const store = {
+  get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* private mode */ } },
+  del(k) { try { sessionStorage.removeItem(k); } catch { /* private mode */ } },
+};
+const connLog = core.createConnLog({
+  now: () => performance.now(),
+  lines: (() => { try { const l = JSON.parse(store.get(LOG_KEY)); return Array.isArray(l) ? l.map(String) : []; } catch { return []; } })(),
+  save: (l) => store.set(LOG_KEY, JSON.stringify(l)),
+});
+const clog = (text) => connLog.add(text);
+connLog.mark(`page load ${new Date().toTimeString().slice(0, 8)}${SIM ? ' (sim)' : ''}`);
+// Runs one step, logging its start, its end and how long it took.
+async function timed(what, fn) {
+  const t0 = performance.now();
+  clog(`${what}…`);
+  try { const r = await fn(); clog(`${what} ok, ${Math.round(performance.now() - t0)} ms`); return r; }
+  catch (e) { clog(`${what} FAILED after ${Math.round(performance.now() - t0)} ms: ${e.name}: ${e.message}`); throw e; }
+}
+const setPairing = (on) => { if (S.pairing !== on) { S.pairing = on; repaint(); } };
+
 // ---------- links ----------
 // A link has prepare() (needs the tap), open() -> transport, close(), and calls onLinkLost.
+// BLE-style links also have ble: true, canResume(), resume(id) (no chooser, after a reload), deviceId() and info().
 
 function bleLink() {
   let device = null, characteristic = null, listener = null;
+  let connectedAt = 0, expectDrop = false, gate = false;
   const forgetListener = () => { characteristic?.removeEventListener('characteristicvaluechanged', listener); };
+  const onDropEvent = () => {
+    if (expectDrop) { expectDrop = false; clog('gatt: disconnected, as asked'); return; }
+    clog(`gatt: gattserverdisconnected${connectedAt ? `, ${((performance.now() - connectedAt) / 1000).toFixed(1)} s after connecting` : ', during setup'}`);
+    onLinkLost(new Error('The Bluetooth link dropped'));
+  };
+  const watch = (d) => { device = d; d.addEventListener('gattserverdisconnected', onDropEvent); };
+  // Whatever is half open gets closed first, so an old attempt cannot hold the link.
+  const dropGatt = () => {
+    if (!device) return;
+    if (device.gatt.connected) expectDrop = true;
+    try { device.gatt.disconnect(); } catch { /* already gone */ }
+  };
+  // Optional: connect only once the module is seen advertising. Never blocks longer than ADVERT_WAIT_MS.
+  async function awaitAdvert() {
+    const ctl = new AbortController();
+    let on;
+    try {
+      await timed('watchAdvertisements', () => new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(false), core.ADVERT_WAIT_MS);
+        on = () => { clearTimeout(timer); resolve(true); };
+        device.addEventListener('advertisementreceived', on, { once: true });
+        device.watchAdvertisements({ signal: ctl.signal }).catch((e) => { clog(`watchAdvertisements: ${e.name}: ${e.message}`); clearTimeout(timer); resolve(false); });
+      }));
+    } finally { ctl.abort(); device.removeEventListener('advertisementreceived', on); }
+  }
+  async function discover(server) {
+    const services = await server.getPrimaryServices();
+    clog(`services: ${services.map((x) => x.uuid.slice(0, 8)).join(', ') || 'none'}`);
+    const service = services.find((x) => x.uuid === td.BLE_MIDI_SERVICE) ?? await server.getPrimaryService(td.BLE_MIDI_SERVICE);
+    return service.getCharacteristic(td.BLE_MIDI_CHARACTERISTIC);
+  }
   return {
+    ble: true,
     reloadAfterClose: true, // reconnecting from the same page load fails on Android Chrome
+    canResume: () => typeof navigator.bluetooth?.getDevices === 'function',
+    deviceId: () => device?.id ?? '',
+    info: () => ({ connectedAt }),
     async prepare() {
       if (!navigator.bluetooth) throw new Error('This browser has no Web Bluetooth. Use Chrome on Android.');
-      device = await navigator.bluetooth.requestDevice({
+      clog(`getDevices: ${this.canResume() ? 'available' : 'not available'}; watchAdvertisements: ${typeof BluetoothDevice !== 'undefined' && 'watchAdvertisements' in BluetoothDevice.prototype ? 'available' : 'not available'}`);
+      const d = await timed('chooser', () => navigator.bluetooth.requestDevice({
         filters: [{ services: [td.BLE_MIDI_SERVICE] }, { namePrefix: 'TD-17' }],
         optionalServices: [td.BLE_MIDI_SERVICE],
-      });
-      device.addEventListener('gattserverdisconnected', onLinkLost);
+      }));
+      clog(`picked "${d.name}", id ${String(d.id).slice(0, 6)}…`);
+      gate = false; // it was advertising a moment ago
+      watch(d);
+    },
+    // After a reload: the device the page was allowed to use before, without the chooser.
+    async resume(id) {
+      if (!this.canResume()) { clog('getDevices not available: back to the chooser'); return false; }
+      let list;
+      try { list = await timed('getDevices', () => core.withTimeout(navigator.bluetooth.getDevices(), 5000, 'getDevices')); }
+      catch { return false; }
+      clog(`getDevices: ${list.length} device(s)`);
+      const d = list.find((x) => x.id === id);
+      if (!d) return false;
+      gate = true;
+      watch(d);
+      return true;
     },
     async open() {
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(td.BLE_MIDI_SERVICE);
-      const ch = await service.getCharacteristic(td.BLE_MIDI_CHARACTERISTIC);
-      const parser = new td.BleMidiParser();
+      connectedAt = 0;
+      dropGatt();
       forgetListener();
+      const queue = core.createQueue();
+      if (gate && typeof device.watchAdvertisements === 'function') await awaitAdvert();
+      gate = true; // later attempts wait for the module to be seen
+      const server = await timed('gatt.connect', () => core.withTimeout(device.gatt.connect(), core.CONNECT_MS, 'Connecting'));
+      connectedAt = performance.now();
+      const ch = await timed('find MIDI service', () => core.withTimeout(discover(server), core.DISCOVER_MS, 'Finding the MIDI service'));
+      const p = ch.properties;
+      clog(`characteristic: read=${p.read} notify=${p.notify} writeNoResp=${p.writeWithoutResponse}`);
+      const parser = new td.BleMidiParser();
       characteristic = ch;
       listener = (e) => {
         const v = e.target.value;
         for (const msg of parser.push(new Uint8Array(v.buffer, v.byteOffset, v.byteLength))) onMidi(msg);
       };
       ch.addEventListener('characteristicvaluechanged', listener);
-      // The BLE-MIDI spec has the central read first; on an encrypted link this prompts pairing.
-      try { await ch.readValue(); } catch (e) { console.warn('Initial read:', e.message); }
+      try {
+        // The BLE-MIDI spec has the central read first; on an encrypted link this prompts pairing. A read that takes
+        // more than a moment is waiting for the phone's dialogs, so it gets a long grace period instead of a timeout.
+        await timed('first read', () => core.withGrace(queue.run(() => ch.readValue()), {
+          slowMs: core.READ_SLOW_MS, graceMs: core.PAIR_GRACE_MS, what: 'The first read',
+          onSlow: () => { clog('first read is slow: the pairing dialogs may be open'); setPairing(true); },
+        }));
+      } catch (e) {
+        if (e.name === 'TimeoutError') { setPairing(false); throw e; }
+        // anything else: the notification step below tells whether the link is usable
+      }
       // Pairing on Android takes two dialogs and some tapping. Wait for it (up to PAIR_WAIT_MS) rather than
       // giving up and reconnecting, which can cancel the pairing in progress.
       try {
-        await core.retryUntil(() => ch.startNotifications(), {
+        await timed('startNotifications', () => core.retryUntil(() => core.withTimeout(queue.run(() => ch.startNotifications()), core.PAIR_GRACE_MS, 'Turning on notifications'), {
           windowMs: PAIR_WAIT_MS, everyMs: 1000, sleep, now: () => performance.now(),
           shouldStop: () => !device.gatt.connected,
-          onWait: () => { if (!S.pairing) { S.pairing = true; repaint(); } },
-        });
-      } finally { if (S.pairing) { S.pairing = false; repaint(); } }
+          onWait: (e) => { clog(`startNotifications retry (${e.name}: ${e.message})`); setPairing(true); },
+        }));
+      } finally { setPairing(false); }
       const canSkipResponse = ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse;
-      // Every write goes through one queue, one whole message at a time: notes can slip in between
+      // Every GATT operation goes through one queue, one whole message at a time: notes can slip in between
       // two SysEx messages (and the 20 ms gap after each) but never inside a multi-packet one.
-      let writes = Promise.resolve();
-      const enqueue = (packets) => {
-        const job = writes.then(async () => {
-          for (const packet of packets) {
-            const data = Uint8Array.from(packet);
-            if (canSkipResponse) await ch.writeValueWithoutResponse(data);
-            else await ch.writeValue(data);
-          }
-        });
-        writes = job.catch(() => {});
-        return job;
-      };
+      const enqueue = (packets) => queue.run(async () => {
+        for (const packet of packets) {
+          const data = Uint8Array.from(packet);
+          if (canSkipResponse) await ch.writeValueWithoutResponse(data);
+          else await ch.writeValue(data);
+        }
+      });
       return {
         send: (bytes) => enqueue(td.bleEncodeSysex(bytes, performance.now())),
         sendShort: (bytes) => enqueue([core.bleEncodeShort(bytes, performance.now())]),
       };
     },
     async close() {
-      device?.removeEventListener('gattserverdisconnected', onLinkLost);
-      // Stop notifications first so Android releases the link.
-      try { await characteristic?.stopNotifications(); } catch { /* link may already be gone */ }
+      device?.removeEventListener('gattserverdisconnected', onDropEvent);
+      // Stop notifications first so Android releases the link (but never wait long for a dead link).
+      try { if (characteristic) await core.withTimeout(characteristic.stopNotifications(), 1500, 'stopNotifications'); } catch { /* link may already be gone */ }
       forgetListener();
-      device?.gatt.disconnect();
+      dropGatt();
     },
   };
 }
 
 function simLink() {
+  // What the pretend module does next survives a reload, like the real module's state would.
+  const KEY = 'td17-sim';
+  const sim = { failures: 0, stall: false, slowRead: false };
+  try { Object.assign(sim, JSON.parse(store.get(KEY) ?? '{}')); } catch { /* ignore */ }
+  const save = () => store.set(KEY, JSON.stringify(sim));
   const module = createSimModule({ emit: (msg) => { if (up) onMidi(msg); }, onShort: (b) => simLogShort(b) });
-  let up = false, failures = 0;
+  let up = false, connectedAt = 0;
   const link = {
+    ble: true,
     reloadAfterClose: false,
     module,
-    async prepare() { failures = 0; }, // pressing Connect means the module is back in reach
+    sim,
+    canResume: () => true,
+    deviceId: () => 'sim',
+    info: () => ({ connectedAt }),
+    async prepare() { sim.failures = 0; save(); }, // pressing Connect means the module is back in reach
+    async resume() { clog('simulated getDevices: found the module'); return true; },
     async open() {
+      connectedAt = 0;
       await sleep(500);
-      if (failures > 0) { failures--; throw new Error('Simulated module is out of reach'); }
+      if (sim.stall) {
+        sim.stall = false; save();
+        await timed('gatt.connect (simulated hang)', () => core.withTimeout(new Promise(() => {}), 2000, 'Connecting'));
+      }
+      if (sim.failures > 0) { sim.failures--; save(); throw new Error('Simulated module is out of reach'); }
+      connectedAt = performance.now();
+      if (sim.slowRead) {
+        sim.slowRead = false; save();
+        try {
+          await timed('first read (simulated pairing)', () => core.withGrace(sleep(4000), {
+            slowMs: 1000, graceMs: core.PAIR_GRACE_MS, what: 'The first read',
+            onSlow: () => { clog('first read is slow: the pairing dialogs may be open'); setPairing(true); },
+          }));
+        } finally { setPairing(false); }
+      }
       up = true;
       return {
         async send(bytes) { if (up) module.receive(bytes); },
@@ -1336,7 +1451,8 @@ function simLink() {
       };
     },
     async close() { up = false; },
-    drop(failNext = 0) { failures = failNext; up = false; onLinkLost(); },
+    drop(failNext = 0) { sim.failures = failNext; save(); up = false; clog('simulated drop'); onLinkLost(new Error('Simulated drop')); },
+    arm(what) { sim[what] = true; save(); },
   };
   return link;
 }
@@ -1382,7 +1498,9 @@ let link = SIM ? simLink() : null; // chosen when connecting
 // ---------- connection life cycle ----------
 let linkGen = 0;       // lets a newer attempt supersede one in flight
 let closing = false;   // the user asked to disconnect
-let retries = 0;
+let inline = 0;        // in-page retries used
+let early = 0;         // failures in a row that came quickly (see core.decideLinkLost)
+let reloads = 0;       // fresh page loads used to reconnect
 let linkUpAt = 0;
 let everUp = false;
 
@@ -1422,12 +1540,15 @@ async function connect(kind = 'ble') {
   if (kind === 'usb') link = usbLink();
   else if (!SIM) link = bleLink();
   closing = false;
-  retries = 0;
+  inline = early = reloads = 0;
   everUp = false;
+  store.del(RECOVER_KEY);
+  clog(`Connect pressed (${kind}${SIM ? ', simulator' : ''})`);
   setConn('connecting');
   try {
     await link.prepare();
   } catch (e) {
+    clog(`prepare: ${e.name}: ${e.message}`);
     if (e.name !== 'NotFoundError') S.message = e.message; // NotFoundError: the chooser was dismissed
     setConn('disconnected');
     return;
@@ -1443,6 +1564,7 @@ async function bringLinkUp() {
     transport = opened;
     linkUpAt = performance.now();
     everUp = true;
+    clog('link up: notifications on');
     setConn('connected');
     await afterLinkUp(gen);
   } catch (e) {
@@ -1459,32 +1581,78 @@ async function afterLinkUp(gen) {
   const id = await reply;
   if (gen !== linkGen) return;
   if (!id.isTd17) { giveUp('Something answered, but it is not a TD-17.'); return; }
+  clog('identity reply: TD-17');
   deviceId = id.deviceId;
   await loadKit();
+  if (gen === linkGen) clog('kit loaded');
 }
 
-// The link dropped, or an attempt to bring it up failed.
+// The link dropped, or an attempt to bring it up failed. See core.decideLinkLost for the policy.
 async function onLinkLost(error) {
   if (closing) return;
   const gen = ++linkGen;
+  const notifying = linkUpAt > 0;
+  const connectedAt = link.info?.().connectedAt ?? 0;
+  const upMs = connectedAt ? performance.now() - connectedAt : 0;
   dropTransport();
-  if (linkUpAt && performance.now() - linkUpAt > STABLE_MS) retries = 0;
   linkUpAt = 0;
-  if (retries >= MAX_RETRIES) {
-    giveUp(error?.message && !everUp ? `${error.message}. Try again.` : 'The connection keeps dropping. Check the module and connect again.');
+  const d = core.decideLinkLost({ ble: Boolean(link.ble), canReload: Boolean(link.canResume?.()), notifying, upMs, inline, early, reloads });
+  ({ inline, early, reloads } = d);
+  clog(`link lost (${error?.name ?? 'Error'}: ${error?.message ?? ''}), notifying ${notifying}, up ${Math.round(upMs)} ms: ${d.action}${d.stale ? ', looks like a stale pairing' : ''} [retries ${inline}, early ${early}, reloads ${reloads}]`);
+  if (d.action === 'giveup') {
+    const text = d.stale ? core.STALE_MESSAGE
+      : error?.message && !everUp ? `${error.message}. Try again.` : 'The connection keeps dropping. Check the module and connect again.';
+    giveUp(link.ble && !d.stale ? `${text} (Hold the status at the top for the log.)` : text);
     return;
   }
-  retries++;
-  S.attempt = retries;
+  if (d.action === 'reload') { reloadToReconnect(); return; }
+  S.attempt = inline;
+  S.maxTries = link.ble ? core.BLE_INLINE_RETRIES : core.USB_RETRIES;
   setConn(everUp ? 'reconnecting' : 'connecting'); // last values stay visible but locked
   await sleep(700);
   if (gen === linkGen && !closing) bringLinkUp();
+}
+
+// A fresh page load is what makes a connection work again on Android Chrome. The page remembers the device,
+// so after the reload it reconnects without the chooser (and without a tap).
+async function reloadToReconnect() {
+  closing = true; // our own disconnect is not a new drop
+  S.attempt = reloads;
+  S.maxTries = core.MAX_RELOADS;
+  setConn(everUp ? 'reconnecting' : 'connecting');
+  store.set(RECOVER_KEY, core.recoverState({ deviceId: link.deviceId(), early, reloads }, Date.now()));
+  clog(`reloading the page to reconnect without the chooser (reload ${reloads} of ${core.MAX_RELOADS})`);
+  await Promise.race([link.close().catch(() => {}), sleep(1500)]);
+  location.reload();
+}
+
+// After such a reload.
+async function resumeAfterReload() {
+  const saved = core.parseRecover(store.get(RECOVER_KEY), Date.now());
+  store.del(RECOVER_KEY);
+  if (!saved) return;
+  if (!SIM) link = bleLink();
+  closing = false;
+  inline = 0; early = saved.early; reloads = saved.reloads;
+  everUp = false;
+  clog(`reconnecting after the reload (early ${early}, reloads ${reloads})`);
+  setConn('connecting');
+  let ok = false;
+  try { ok = await link.resume(saved.deviceId); } catch (e) { clog(`resume: ${e.name}: ${e.message}`); }
+  if (!ok) {
+    S.message = 'Could not reconnect by itself. Tap Connect.';
+    setConn('disconnected');
+    return;
+  }
+  bringLinkUp();
 }
 
 async function closeLink(message) {
   closing = true;
   linkGen++;
   dropTransport();
+  store.del(RECOVER_KEY);
+  clog(`closing the link${message ? `: ${message}` : ''}`);
   await link.close().catch(() => {});
   setConn('disconnected');
   if (link.reloadAfterClose) {
@@ -1506,7 +1674,28 @@ $('usbBtn').onclick = () => connect('usb');
 const VERSION = new URL(import.meta.url).searchParams.get('v');
 $('reloadBtn').textContent = VERSION ? `Reload app (version ${VERSION})` : 'Reload app';
 $('reloadBtn').onclick = () => location.reload();
+// Press and hold the connection status to read and copy the connection log.
+const logPanel = $('logPanel');
+function openLog() {
+  $('logText').textContent = connLog.text() || '(empty)';
+  $('logCopy').textContent = 'Copy';
+  logPanel.showModal();
+  $('logText').scrollTop = $('logText').scrollHeight;
+}
+const longHeld = longPress($('conn'), openLog, 600);
+$('logClose').onclick = () => logPanel.close();
+$('logClear').onclick = () => { connLog.clear(); connLog.mark('cleared'); $('logText').textContent = connLog.text(); };
+logPanel.addEventListener('click', (e) => { if (e.target === logPanel) logPanel.close(); });
+$('logCopy').onclick = async () => {
+  try { await navigator.clipboard.writeText(connLog.text()); $('logCopy').textContent = 'Copied'; }
+  catch { // no clipboard access: select the text so the phone's own Copy works
+    const r = document.createRange(); r.selectNodeContents($('logText'));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    $('logCopy').textContent = 'Selected: tap Copy in the phone menu';
+  }
+};
 $('conn').onclick = async () => {
+  if (longHeld()) return;
   if (S.conn !== 'connected') return;
   if (!await ask('Disconnect from the TD-17?', 'Changes you made stay stored on the module.', 'Disconnect')) return;
   await leaveCompare();
@@ -1551,8 +1740,12 @@ function buildSimPanel() {
       [[0, 36, 110], [250, 42, 80], [500, 38, 105], [750, 42, 75], [1000, 36, 110], [1250, 46, 85], [1500, 38, 105], [1750, 49, 120]]
         .forEach(([t, n, v]) => setTimeout(() => { if (n === 46) m.pedal(5); if (n === 42) m.pedal(120); m.hit(n, v); }, t));
     },
-    'Link drops, comes back': () => link.drop(1),
-    'Link drops for good': () => link.drop(99),
+    'Link drops once (retry works)': () => link.drop(0),
+    'Link drops, needs a reload': () => link.drop(1),
+    'Link drops for good (stale pairing)': () => link.drop(99),
+    'Next connect hangs (timeout)': () => { link.arm('stall'); toast('The next connection attempt will hang'); },
+    'Next connect: slow pairing read': () => { link.arm('slowRead'); toast('The next first read will be slow'); },
+    'Show connection log': openLog,
     'Theme: dark': () => { document.documentElement.dataset.theme = 'dark'; },
     'Theme: light': () => { document.documentElement.dataset.theme = 'light'; },
     'Theme: auto': () => { delete document.documentElement.dataset.theme; },
@@ -1571,3 +1764,4 @@ try {
 buildMixer();
 if (SIM) buildSimPanel();
 repaint();
+resumeAfterReload();

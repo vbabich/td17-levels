@@ -525,6 +525,103 @@ export async function retryUntil(action, { windowMs, everyMs = 1000, sleep, now,
   }
 }
 
+// ---------- connection: timeouts, one GATT queue, recovery policy, log ----------
+export const CONNECT_MS = 15000;    // gatt.connect()
+export const DISCOVER_MS = 10000;   // finding the MIDI service and characteristic
+export const READ_SLOW_MS = 3000;   // a first read slower than this is probably waiting for the pairing dialogs ...
+export const PAIR_GRACE_MS = 30000; // ... so it is given this long instead
+export const ADVERT_WAIT_MS = 3000; // how long to wait for an advertisement before connecting anyway
+export const STABLE_MS = 30000;     // a link up this long counts as good: the failure counters start again
+export const EARLY_DROP_MS = 8000;  // a link that drops sooner than this after connecting is a failed attempt
+export const BLE_INLINE_RETRIES = 1; // in-page retries over Bluetooth (the next step is a fresh page load)
+export const USB_RETRIES = 3;
+export const MAX_RELOADS = 2;       // fresh-page-load reconnects in a row
+export const STALE_AFTER = 2;       // early failures in a row that suggest a bad pairing on the phone
+export const RECOVER_TTL_MS = 120000;
+export const STALE_MESSAGE = 'The link keeps dropping, which can be a stale pairing. Forget "TD-17" in Android Bluetooth settings, then connect again.';
+
+export class TimeoutError extends Error {
+  constructor(what, ms) { super(`${what} timed out after ${Math.round(ms / 100) / 10} s`); this.name = 'TimeoutError'; }
+}
+
+// Rejects with a TimeoutError when `promise` has not settled after `ms`. The action itself is not cancelled.
+export function withTimeout(promise, ms, what, { setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimer(() => reject(new TimeoutError(what, ms)), ms);
+    Promise.resolve(promise).then((v) => { clearTimer(timer); resolve(v); }, (e) => { clearTimer(timer); reject(e); });
+  });
+}
+
+// Like withTimeout, but with a slow stage: after slowMs it calls onSlow() (the pairing dialogs may be open, so the
+// clock effectively stops) and only gives up after graceMs.
+export function withGrace(promise, { slowMs, graceMs, what, onSlow = () => {}, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  return new Promise((resolve, reject) => {
+    const slow = setTimer(onSlow, slowMs);
+    const dead = setTimer(() => reject(new TimeoutError(what, graceMs)), graceMs);
+    const done = (f, v) => { clearTimer(slow); clearTimer(dead); f(v); };
+    Promise.resolve(promise).then((v) => done(resolve, v), (e) => done(reject, e));
+  });
+}
+
+// Android Chrome runs one GATT operation at a time: everything goes through run(), one after another.
+// A failure is the caller's, and never blocks the ones queued behind it.
+export function createQueue() {
+  let tail = Promise.resolve();
+  return {
+    run(task) {
+      const job = tail.then(task);
+      tail = job.catch(() => {});
+      return job;
+    },
+  };
+}
+
+// A drop with fewer than EARLY_DROP_MS of life, or one before notifications were on, is a failed attempt.
+export function isEarlyFailure({ notifying, upMs }) { return !notifying || upMs < EARLY_DROP_MS; }
+
+// What to do when a link dropped or an attempt failed. Returns the next action and the updated counters.
+//   ble: Bluetooth-style policy (one retry, then a fresh page load); otherwise USB_RETRIES in-page retries.
+//   canReload: the device can be reached again after a reload without the chooser.
+export function decideLinkLost({ ble, canReload = false, notifying, upMs, inline = 0, early = 0, reloads = 0 }) {
+  if (notifying && upMs >= STABLE_MS) { inline = 0; early = 0; reloads = 0; }
+  early = isEarlyFailure({ notifying, upMs }) ? early + 1 : 0;
+  const stale = ble && early >= STALE_AFTER;
+  if (!ble) return inline < USB_RETRIES ? { action: 'retry', inline: inline + 1, early, reloads, stale: false } : { action: 'giveup', inline, early, reloads, stale: false };
+  if (stale) return { action: 'giveup', inline, early, reloads, stale };
+  // An attempt that never got notifications going is not worth repeating in the same page.
+  if (notifying && inline < BLE_INLINE_RETRIES) return { action: 'retry', inline: inline + 1, early, reloads, stale };
+  if (canReload && reloads < MAX_RELOADS) return { action: 'reload', inline, early, reloads: reloads + 1, stale };
+  return { action: 'giveup', inline, early, reloads, stale };
+}
+
+// What survives a reload: the device to reconnect to and the counters, valid for RECOVER_TTL_MS.
+export function recoverState({ deviceId, early, reloads }, now) {
+  return JSON.stringify({ deviceId: String(deviceId ?? ''), early, reloads, at: now });
+}
+export function parseRecover(raw, now) {
+  let r;
+  try { r = JSON.parse(raw); } catch { return null; }
+  if (!r || typeof r !== 'object' || !Number.isFinite(r.at) || now - r.at > RECOVER_TTL_MS || now < r.at) return null;
+  const n = (v) => (Number.isInteger(v) && v >= 0 && v <= 99 ? v : 0);
+  return { deviceId: typeof r.deviceId === 'string' ? r.deviceId : '', early: n(r.early), reloads: n(r.reloads) };
+}
+
+// A short text log of the connection steps, kept across reloads by the caller (load/save).
+export function createConnLog({ now, max = 300, lines = [], save = () => {} }) {
+  let buf = lines.slice(-max);
+  return {
+    add(text) {
+      buf.push(`${(now() / 1000).toFixed(2)} ${text}`);
+      if (buf.length > max) buf = buf.slice(-max);
+      save(buf);
+    },
+    clear() { buf = []; save(buf); },
+    mark(text) { buf.push(`--- ${text}`); if (buf.length > max) buf = buf.slice(-max); save(buf); },
+    get lines() { return buf.slice(); },
+    text: () => buf.join('\n'),
+  };
+}
+
 // The TD-17's MIDI ports among the ones the browser lists (USB): the first input and output named TD-17.
 export function pickTd17Ports(inputs, outputs) {
   const ok = (p) => /TD-17/i.test(p.name ?? '') && p.state !== 'disconnected';

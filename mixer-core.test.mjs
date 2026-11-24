@@ -449,3 +449,117 @@ test('kit names: ASCII only, 12 characters, padded for the module', () => {
   assert.equal(core.parseKitName(b), 'Dry Funk');
   assert.ok(b.every((x) => x >= 32 && x < 127));
 });
+
+// ---------- connection: timeouts, queue, recovery, log ----------
+const fakeTimers = () => {
+  let id = 0; const timers = new Map();
+  return {
+    setTimer: (fn, ms) => { timers.set(++id, { fn, ms }); return id; },
+    clearTimer: (i) => timers.delete(i),
+    fire: (ms) => { for (const [i, t] of [...timers]) if (t.ms === ms) { timers.delete(i); t.fn(); } },
+    count: () => timers.size,
+  };
+};
+
+test('withTimeout: passes the result through, or rejects with a TimeoutError', async () => {
+  const t = fakeTimers();
+  assert.equal(await core.withTimeout(Promise.resolve(5), 100, 'x', t), 5);
+  assert.equal(t.count(), 0); // the timer is cleared
+  const never = core.withTimeout(new Promise(() => {}), 100, 'Connecting', t);
+  t.fire(100);
+  await assert.rejects(never, (e) => e.name === 'TimeoutError' && /Connecting timed out after 0\.1 s/.test(e.message));
+  await assert.rejects(core.withTimeout(Promise.reject(new Error('boom')), 100, 'x', t), /boom/);
+});
+
+test('withGrace: calls onSlow after the slow time and only gives up after the grace time', async () => {
+  const t = fakeTimers();
+  let slow = 0;
+  const p = core.withGrace(new Promise(() => {}), { slowMs: 3000, graceMs: 30000, what: 'The first read', onSlow: () => slow++, ...t });
+  t.fire(3000);
+  assert.equal(slow, 1);
+  t.fire(30000);
+  await assert.rejects(p, /first read timed out after 30 s/);
+  // finishing during the slow stage is fine and clears both timers
+  const q = core.withGrace(Promise.resolve('ok'), { slowMs: 3000, graceMs: 30000, what: 'x', ...t });
+  assert.equal(await q, 'ok');
+  assert.equal(t.count(), 0);
+});
+
+test('createQueue runs one task at a time, in order, and a failure does not block the rest', async () => {
+  const q = core.createQueue();
+  const order = []; let running = 0, most = 0;
+  const task = (name, fail) => async () => {
+    running++; most = Math.max(most, running); order.push(`start ${name}`);
+    await new Promise((r) => setTimeout(r, 5));
+    running--; order.push(`end ${name}`);
+    if (fail) throw new Error(name);
+    return name;
+  };
+  const a = q.run(task('a')), b = q.run(task('b', true)), c = q.run(task('c'));
+  assert.equal(await a, 'a');
+  await assert.rejects(b, /b/);
+  assert.equal(await c, 'c');
+  assert.equal(most, 1);
+  assert.deepEqual(order, ['start a', 'end a', 'start b', 'end b', 'start c', 'end c']);
+});
+
+test('Bluetooth: one in-page retry after a good link drops, then a fresh page load', () => {
+  const base = { ble: true, canReload: true, notifying: true, upMs: 12000 };
+  let d = core.decideLinkLost(base);
+  assert.equal(d.action, 'retry'); assert.equal(d.inline, 1); assert.equal(d.early, 0);
+  // the retry never got notifications going: reload
+  d = core.decideLinkLost({ ...base, notifying: false, upMs: 0, inline: d.inline, early: d.early, reloads: d.reloads });
+  assert.equal(d.action, 'reload'); assert.equal(d.reloads, 1); assert.equal(d.early, 1);
+  // a failure while pairing goes straight to a reload
+  d = core.decideLinkLost({ ble: true, canReload: true, notifying: false, upMs: 0 });
+  assert.equal(d.action, 'reload');
+});
+
+test('Bluetooth: gives up without a reload when the device cannot be reached again, or after too many reloads', () => {
+  assert.equal(core.decideLinkLost({ ble: true, canReload: false, notifying: false, upMs: 0 }).action, 'giveup');
+  assert.equal(core.decideLinkLost({ ble: true, canReload: true, notifying: true, upMs: 20000, inline: 1, reloads: core.MAX_RELOADS }).action, 'giveup');
+});
+
+test('Bluetooth: two quick failures in a row look like a stale pairing; a good link clears the count', () => {
+  let d = core.decideLinkLost({ ble: true, canReload: true, notifying: false, upMs: 0 });
+  assert.equal(d.stale, false);
+  d = core.decideLinkLost({ ble: true, canReload: true, notifying: false, upMs: 0, early: d.early, reloads: d.reloads });
+  assert.equal(d.stale, true); assert.equal(d.action, 'giveup');
+  assert.match(core.STALE_MESSAGE, /Forget "TD-17" in Android Bluetooth settings/);
+  assert.doesNotMatch(core.STALE_MESSAGE, /module's pairing|delete the pairing/i);
+  // a link that dropped after a real session is not an early failure
+  d = core.decideLinkLost({ ble: true, canReload: true, notifying: true, upMs: 60000, early: 1, inline: 1, reloads: 1 });
+  assert.equal(d.early, 0); assert.equal(d.action, 'retry'); assert.equal(d.reloads, 0);
+  // notifications on, but gone within a few seconds: still early
+  assert.equal(core.isEarlyFailure({ notifying: true, upMs: 5000 }), true);
+  assert.equal(core.isEarlyFailure({ notifying: true, upMs: 9000 }), false);
+});
+
+test('USB and others keep three in-page retries', () => {
+  let d = { inline: 0, early: 0, reloads: 0 };
+  for (let i = 1; i <= core.USB_RETRIES; i++) {
+    d = core.decideLinkLost({ ble: false, notifying: false, upMs: 0, ...d });
+    assert.equal(d.action, 'retry'); assert.equal(d.inline, i); assert.equal(d.stale, false);
+  }
+  assert.equal(core.decideLinkLost({ ble: false, notifying: false, upMs: 0, ...d }).action, 'giveup');
+});
+
+test('recovery state survives a reload only briefly and is sanitised', () => {
+  const raw = core.recoverState({ deviceId: 'abc', early: 1, reloads: 1 }, 1000);
+  assert.deepEqual(core.parseRecover(raw, 5000), { deviceId: 'abc', early: 1, reloads: 1 });
+  assert.equal(core.parseRecover(raw, 1000 + core.RECOVER_TTL_MS + 1), null); // too old
+  assert.equal(core.parseRecover(raw, 500), null);                             // from the future
+  assert.equal(core.parseRecover('nope', 5000), null);
+  assert.equal(core.parseRecover(null, 5000), null);
+  assert.deepEqual(core.parseRecover(JSON.stringify({ deviceId: 5, early: -3, reloads: 'x', at: 1000 }), 2000), { deviceId: '', early: 0, reloads: 0 });
+});
+
+test('connection log keeps the last lines, stamps them and reports each change', () => {
+  let t = 1500; const saved = [];
+  const log = core.createConnLog({ now: () => t, max: 3, lines: ['old'], save: (l) => saved.push(l.length) });
+  log.add('gatt.connect'); t = 2250; log.add('services ok'); log.mark('page load'); log.add('more');
+  assert.deepEqual(log.lines, ['2.25 services ok', '--- page load', '2.25 more']);
+  assert.equal(log.text().split('\n').length, 3);
+  assert.equal(saved.length, 4);
+  log.clear(); assert.deepEqual(log.lines, []);
+});

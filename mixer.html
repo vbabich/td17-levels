@@ -296,6 +296,8 @@
   dialog .btns { display:flex; gap:8px; justify-content:flex-end; }
   dialog .btns button { min-height:48px; }
 
+  #logText { margin:0 0 12px; max-height:min(55vh, 420px); overflow:auto; font:11px/1.35 ui-monospace, monospace; white-space:pre-wrap; word-break:break-word; user-select:text; -webkit-user-select:text; color:var(--text); background:var(--raise); border-radius:8px; padding:8px; }
+  #logPanel { width:min(92vw, 520px); }
   /* ---------- only with ?sim ---------- */
   #simPanel { border:2px dashed var(--demo); }
   #simPanel h2 { color:var(--demo); font-size:15px; }
@@ -390,12 +392,18 @@
 
 
 
+<dialog id="logPanel">
+  <h2>Connection log</h2>
+  <pre id="logText"></pre>
+  <div class="btns"><button id="logClear">Clear</button><button id="logCopy">Copy</button><button id="logClose">Close</button></div>
+</dialog>
+
 <dialog id="simPanel">
   <h2>Simulated module</h2>
   <p>Only with ?sim. Pretend the module did something.</p>
   <div class="opts" id="simOpts"></div>
 </dialog>
 
-<script type="module" src="mixer.js?v=43"></script>
+<script type="module" src="mixer.js?v=44"></script>
 </body>
 </html>
